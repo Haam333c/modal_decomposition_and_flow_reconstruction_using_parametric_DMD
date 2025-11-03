@@ -1,0 +1,552 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.tri as mtri
+import seaborn as sns
+
+def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
+    """
+    Plots the velocity magnitude over time for each Reynolds number.
+
+    Parameters:
+    - snapshot_dict: Dictionary of velocity snapshots per Reynolds number.
+    - sampled_times_dict: Dictionary of time steps per Reynolds number.
+    - Re_list: List of Reynolds numbers to plot.
+    """
+    n_re = len(Re_list)
+    fig, axes = plt.subplots(n_re, 1, figsize=(12, 3 * n_re), sharex=True)
+
+    for i, Re in enumerate(Re_list):
+        mags = np.linalg.norm(snapshot_dict[Re], axis=0)
+        times = np.array(sampled_times_dict[Re], dtype=float)
+
+        ax = axes[i]
+        ax.plot(times, mags, label=f"Re={Re}", color='tab:blue')
+        ax.set_ylabel("Velocity Magnitude")
+        ax.set_title(f"Snapshot Magnitude Over Time — Re={Re}")
+        ax.grid(True)
+        ax.legend()
+
+        threshold = 0.01 * np.max(mags)
+        active_indices = np.where(mags > threshold)[0]
+        if len(active_indices) > 0:
+            t_start = times[active_indices[0]]
+            t_end = times[active_indices[-1]]
+            margin = 0.5
+            ax.set_xlim(t_start - margin, t_end + margin)
+
+    axes[-1].set_xlabel("Time (s)")
+    plt.suptitle("Snapshot Magnitudes Over Time Across Reynolds Numbers", fontsize=16)
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    plt.show()
+
+from sklearn.utils.extmath import randomized_svd
+
+def compute_pod(snapshot_dict, Re_list, n_components=100):
+    snapshot_matrix = np.hstack([snapshot_dict[Re] for Re in Re_list])
+    U, s, Vh = randomized_svd(snapshot_matrix, n_components=n_components)
+    normalized_energy = s**2 / np.sum(s**2)
+    cumulative_energy = np.cumsum(normalized_energy)
+    residual_content = 1 - cumulative_energy
+    return cumulative_energy, residual_content
+
+def get_thresholds(residual_content, threshold=0.99, tau_list=None):
+    if tau_list is None:
+        tau_list = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7]
+    num_modes_99 = np.searchsorted(1 - residual_content, threshold) + 1
+    tau_ranks = [(tau, np.where(residual_content > tau)[0][-1] + 1) for tau in tau_list]
+    return num_modes_99, tau_ranks
+
+def plot_cumulative_energy(cumulative_energy, threshold, num_modes_99):
+    plt.figure(figsize=(10, 5))
+    plt.plot(np.arange(1, len(cumulative_energy) + 1), cumulative_energy, marker='o', label='Cumulative Energy')
+    plt.axhline(threshold, color='red', linestyle='--', label='99% Threshold')
+    plt.axvline(num_modes_99, color='green', linestyle='--', label=f'{num_modes_99} Modes')
+    plt.text(0.65, 0.15,
+             f"Modes for 99% energy: {num_modes_99}",
+             transform=plt.gca().transAxes,
+             fontsize=10, color='green')
+
+    x_margin = 10
+    x_min = max(1, num_modes_99 - x_margin)
+    x_max = min(len(cumulative_energy), num_modes_99 + x_margin)
+    plt.xlim(x_min, x_max)
+    plt.ylim(threshold - 0.05, 1.01)
+
+    plt.title("Cumulative Energy Retained by POD Modes", fontsize=13)
+    plt.xlabel("Number of Modes")
+    plt.ylabel("Cumulative Energy")
+    plt.grid(True)
+    plt.legend(fontsize=9)
+    plt.tight_layout()
+    plt.show()
+
+def plot_residual_energy(residual_content, tau_ranks):
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(np.arange(1, len(residual_content) + 1), residual_content, marker='o', color='tab:blue', label='Residual Energy')
+
+    colors = plt.cm.viridis(np.linspace(0, 1, len(tau_ranks)))
+    box_x = 0.75
+    box_y = 0.95
+    line_spacing = 0.06
+
+    for i, (_, idx) in enumerate(tau_ranks):
+        y_val = residual_content[idx - 1]
+        ax.plot(idx, y_val, 'o', color=colors[i], markersize=8)
+        ax.plot([box_x], [box_y - i * line_spacing], marker='o', color=colors[i],
+                transform=ax.transAxes, markersize=6)
+        ax.text(box_x + 0.02, box_y - i * line_spacing,
+                f"Rank {idx}: Residual = {y_val:.1e}",
+                transform=ax.transAxes,
+                fontsize=10,
+                verticalalignment='center',
+                color='black')
+
+    ax.set_title("Residual Information Content (1 − Cumulative Energy)", fontsize=13)
+    ax.set_xlabel("Number of Modes")
+    ax.set_ylabel("Residual Energy")
+    ax.grid(True)
+    ax.legend()
+    plt.tight_layout()
+    plt.show()
+
+def plot_dmd_modal_comparison(pdmd, Re_list, sampled_times_dict, Re_value, n_modes_to_plot=5):
+    """
+    Plots a comparison of true vs ParametricDMD modal coefficients for a given Reynolds number.
+
+    Parameters:
+    - pdmd: Fitted ParametricDMD object.
+    - Re_list: List of Reynolds numbers used in training.
+    - sampled_times_dict: Dictionary of physical time steps per Reynolds number.
+    - Re_value: Reynolds number to inspect (e.g., 300).
+    - n_modes_to_plot: Number of dominant modes to visualize (default: 5).
+    """
+    if Re_value not in Re_list:
+        raise ValueError(f"Re = {Re_value} not found in Re_list")
+
+    index = np.where(Re_list == Re_value)[0][0]
+
+    times = np.array(sampled_times_dict[Re_value], dtype=float)
+
+    modal_true = pdmd.training_modal_coefficients[index]
+    modal_dmd  = pdmd._dmd[index].reconstructed_data[:, :modal_true.shape[1]]
+
+    fig, axes = plt.subplots(n_modes_to_plot, 1, figsize=(12, 3 * n_modes_to_plot), sharex=True)
+
+    for mode in range(n_modes_to_plot):
+        ax = axes[mode]
+        ax.plot(times, modal_true[mode], label=f"True Mode {mode} — Re = {Re_value}", color='tab:blue')
+        ax.plot(times, modal_dmd[mode], label=f"ParametricDMD Mode {mode} — Re = {Re_value}", linestyle='--', color='tab:orange')
+        ax.set_ylabel("Amplitude")
+        ax.set_title(f"Mode {mode} — Re = {Re_value}")
+        ax.grid(True)
+        ax.legend()
+
+    axes[-1].set_xlabel("Time (s)")
+    plt.suptitle("DMD Modal Coefficients for the Training Parameters vs True Data", fontsize=16)
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    plt.show()
+
+def plot_dmd_fft_comparison(pdmd, Re_list, Re_target, n_plot=4, dt=0.01):
+    """
+    Plot FFTs of modal coefficients: True vs ParametricDMD reconstruction over training window.
+
+    Parameters:
+    - pdmd: ParametricDMD object containing training and reconstruction data
+    - Re_list: list or array of Reynolds numbers used in training
+    - Re_target: specific Reynolds number to compare
+    - n_plot: number of modes to plot
+    - dt: time step size used during training
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    # Locate index for target Re
+    i = np.where(Re_list == Re_target)[0][0]
+
+    # Extract modal coefficients
+    modal_true = pdmd.training_modal_coefficients[i]  # shape: (n_modes, n_time)
+    modal_dmd = pdmd._dmd[i].reconstructed_data[:, :pdmd._time_instants]  # shape: (n_modes, n_time)
+
+    # Frequency axis
+    n_time = modal_true.shape[1]
+    freqs = np.fft.rfftfreq(n_time, d=dt)
+
+    # Plot
+    fig, axes = plt.subplots(n_plot, 1, figsize=(10, 2.5 * n_plot), sharex=True)
+    fig.suptitle("Frequency Spectrum of DMD Modal Coefficients for the Training Parameter vs True Data", fontsize=14)
+
+    for mode in range(n_plot):
+        modal_true_clean = np.asarray(modal_true[mode], dtype=np.float64)
+        modal_dmd_clean = np.asarray(modal_dmd[mode], dtype=np.float64)
+        fft_true = np.abs(np.fft.rfft(modal_true_clean))
+        fft_dmd = np.abs(np.fft.rfft(modal_dmd_clean))
+
+        ax = axes[mode]
+        line1, = ax.plot(freqs, fft_true, color="tab:blue")
+        line2, = ax.plot(freqs, fft_dmd, color="tab:orange", linestyle="--")
+        ax.set_ylabel("Spectral Amplitude")
+        ax.grid(True)
+
+        # Subplot title
+        ax.set_title(f"Mode {mode} — Re {Re_target}")
+
+        # Stacked legend labels
+        label1 = "True FFT"
+        label2 = "ParametricDMD FFT"
+        ax.legend([line1, line2], [label1, label2])
+
+    axes[-1].set_xlabel("Frequency (Hz)")
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.show()
+
+
+def plot_flow_comparison_dmd_vs_true(
+    Re_target, 
+    Re_list,
+    t_start,
+    t_end,
+    granularity,
+    rom,
+    pdmd,
+    mean_flow,
+    norm_scales,
+    sampled_times_dict,
+    snapshot_processed_dict,
+    masked_coords_dict,
+    num_points_dict,
+    cmap='icefire'
+):
+   
+
+    # Colormap setup
+    if isinstance(cmap, str):
+        cmap = sns.color_palette(cmap, as_cmap=True)
+
+    # Time setup
+    i = np.where(Re_list == Re_target)[0][0]
+
+    time_vec = np.array(sampled_times_dict[Re_target], dtype=float)
+    selected_times = np.arange(t_start, t_end+ 1e-6, granularity)
+    t_indices = [np.where(np.isclose(time_vec, t, atol=1e-6))[0][0] for t in selected_times]
+
+    # Spatial setup
+    U_basis = rom.modes
+    coords = masked_coords_dict[Re_target]
+    num_points = num_points_dict[Re_target]
+    tri = mtri.Triangulation(coords[:, 0], coords[:, 1])
+
+    # DMD coefficients
+    modal_dmd = pdmd._dmd[i].reconstructed_data[:, :pdmd.training_modal_coefficients[i].shape[1]]
+    mean = mean_flow
+    norm_scale = norm_scales[Re_target]
+
+    # Precompute fields
+    fields_per_row = []
+    for t_idx in t_indices:
+        coeff_t = modal_dmd[:, t_idx]
+        U_dmd = U_basis @ coeff_t * norm_scale + mean
+        U_true = snapshot_processed_dict[Re_target][:, t_idx] * norm_scale + mean
+
+        ux_dmd, uy_dmd = np.real(U_dmd[:num_points]), np.real(U_dmd[num_points:])
+        ux_true, uy_true = np.real(U_true[:num_points]), np.real(U_true[num_points:])
+
+        mag_dmd = np.sqrt(ux_dmd**2 + uy_dmd**2)
+        mag_true = np.sqrt(ux_true**2 + uy_true**2)
+        residual = mag_true - mag_dmd
+
+        fields_per_row.append((mag_true, mag_dmd, residual, time_vec[t_idx]))
+
+    # Plotting
+    fig_width = 16
+    fig_height_per_row = 4.2
+    n_rows = len(fields_per_row)
+    n_cols = 3
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_width, fig_height_per_row * n_rows))
+    fig.suptitle(f"Flow Comparison — DMD vs True (Re = {Re_target})", fontsize=20)
+
+    if n_rows == 1:
+        axes = np.expand_dims(axes, axis=0)
+
+    for row, (mag_true, mag_dmd, residual, t_val) in enumerate(fields_per_row):
+        titles = ["True Magnitude", "DMD reconstruction", "Residual (True − DMD)"]
+        vmin_vel = min(mag_true.min(), mag_dmd.min())
+        vmax_vel = max(mag_true.max(), mag_dmd.max())
+
+        # True
+        ax_true = axes[row, 0]
+        contour_true = ax_true.tricontourf(tri, mag_true, levels=50, cmap=cmap, vmin=vmin_vel, vmax=vmax_vel)
+        ax_true.set_title(f"{titles[0]} — t = {t_val:.2f}s", fontsize=14, pad=12)
+        ax_true.axis('equal')
+        ax_true.axis('off')
+        fig.colorbar(contour_true, ax=ax_true, shrink=0.85, pad=0.02)
+
+        # DMD
+        ax_dmd = axes[row, 1]
+        contour_dmd = ax_dmd.tricontourf(tri, mag_dmd, levels=50, cmap=cmap, vmin=vmin_vel, vmax=vmax_vel)
+        ax_dmd.set_title(f"{titles[1]} — t = {t_val:.2f}s", fontsize=14, pad=12)
+        ax_dmd.axis('equal')
+        ax_dmd.axis('off')
+        fig.colorbar(contour_dmd, ax=ax_dmd, shrink=0.85, pad=0.02)
+
+        # Residual
+        ax_res = axes[row, 2]
+        contour_res = ax_res.tricontourf(tri, residual, levels=50, cmap=cmap)
+        ax_res.set_title(f"{titles[2]} — t = {t_val:.2f}s", fontsize=14, pad=12)
+        ax_res.axis('equal')
+        ax_res.axis('off')
+        fig.colorbar(contour_res, ax=ax_res, shrink=0.85, pad=0.02)
+
+    plt.subplots_adjust(top=0.95, bottom=0.05, left=0.04, right=0.98, hspace=0.6, wspace=0.4)
+    plt.show()
+
+def plot_dmd_modal_comparison_interp_vs_neighbors(
+    pdmd,
+    cached_dmd_list,
+    Re_list,
+    n_modes_to_plot=6,
+    neighbor_distance=10,
+    figsize=(10, 2.8),
+    cmap=None
+):
+
+    # Step 1: Extract interpolated modal coefficients
+    interpolated_modal_coeffs = pdmd.interpolated_modal_coefficients[0]  # shape: (r, n_forecast)
+
+    # Step 2: Reconstruct forecast time vector
+    dt = pdmd.dmd_time["dt"]
+    t0_forecast = pdmd.dmd_time["t0"]
+    n_forecast = interpolated_modal_coeffs.shape[1]
+    time_forecast = np.arange(n_forecast) * dt + t0_forecast
+
+    # Step 3: Identify neighboring Re values
+    Re_interp = pdmd.parameters[0, 0]
+    Re_neighbors = [Re for Re in Re_list if abs(Re - Re_interp) == neighbor_distance]
+
+    # Step 4: Forecast modal coefficients for neighboring Re values
+    modal_coeffs_neighbors_forecasted = {}
+    for Re in Re_neighbors:
+        i = np.where(Re_list == Re)[0][0]
+        dmd = cached_dmd_list[i]
+        dmd.dmd_time = pdmd.dmd_time  # ensure same forecast window
+        coeffs = dmd.reconstructed_data  # shape: (r, n_forecast)
+        modal_coeffs_neighbors_forecasted[Re] = coeffs
+
+    # Step 5: Plot each mode separately
+    fig, axes = plt.subplots(
+        n_modes_to_plot, 1,
+        figsize=(figsize[0], figsize[1] * n_modes_to_plot),
+        sharex=True
+    )
+
+    for mode_idx in range(n_modes_to_plot):
+        ax = axes[mode_idx]
+
+        # Interpolated mode
+        ax.plot(
+            time_forecast,
+            interpolated_modal_coeffs[mode_idx],
+            label=f"Interpolated",
+            linewidth=2
+        )
+
+        # Neighboring forecasted modes
+        for Re in Re_neighbors:
+            coeffs = modal_coeffs_neighbors_forecasted[Re]
+            ax.plot(
+                time_forecast,
+                coeffs[mode_idx],
+                '--',
+                label=f"Trained Re {Re}",
+                alpha=0.7
+            )
+
+        ax.set_ylabel("Amplitude")
+        ax.set_title(f"Mode {mode_idx} — Interpolated vs Trained Neighbors")
+        ax.grid(True)
+        ax.legend()
+
+    axes[-1].set_xlabel("Physical Time [s]")
+    fig.suptitle(
+        f"DMD Modal Coefficients for Interpolated (Re = {Re_interp}) vs Trained Neighboring Re",
+        fontsize=16
+    )
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.show()
+
+def plot_interpolated_modal_fft_comparison(pdmd, Re_list, cached_dmd_list, n_modes_to_plot=6):
+    """
+    Plot FFTs of interpolated DMD modal coefficients vs trained neighbors.
+
+    Parameters:
+    - pdmd: ParametricDMD object containing interpolated modal coefficients and forecast time info
+    - Re_list: list or array of Reynolds numbers used in training
+    - cached_dmd_list: list of trained DMD models aligned with Re_list
+    - n_modes_to_plot: number of DMD modes to visualize (default: 6)
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    # Extract interpolated modal coefficients
+    interpolated_modal_coeffs = pdmd.interpolated_modal_coefficients[0]  # shape: (r, n_forecast)
+
+    # Reconstruct forecast time vector
+    dt = pdmd.dmd_time["dt"]
+    t0_forecast = pdmd.dmd_time["t0"]
+    n_forecast = interpolated_modal_coeffs.shape[1]
+    time_forecast = np.arange(n_forecast) * dt + t0_forecast
+
+    # Identify neighboring Re values
+    Re_interp = pdmd.parameters[0, 0]
+    Re_neighbors = [Re for Re in Re_list if abs(Re - Re_interp) == 10]
+
+    # Forecast modal coefficients for neighboring Re values
+    modal_coeffs_neighbors_forecasted = {}
+    for Re in Re_neighbors:
+        i = np.where(Re_list == Re)[0][0]
+        dmd = cached_dmd_list[i]
+        dmd.dmd_time = pdmd.dmd_time  # ensure same forecast window
+        coeffs = dmd.reconstructed_data  # shape: (r, n_forecast)
+        modal_coeffs_neighbors_forecasted[Re] = coeffs
+
+    # Plot FFTs
+    fig, axes = plt.subplots(n_modes_to_plot, 1, figsize=(12, 3.2 * n_modes_to_plot), sharex=True)
+    fig.suptitle(f"FFT of DMD Modal Coefficients — Interpolated Re = {Re_interp}", fontsize=18)
+
+    freqs = np.fft.rfftfreq(n_forecast, d=dt)
+
+    for mode_idx in range(n_modes_to_plot):
+        ax_fft = axes[mode_idx]
+        interp_mode = np.array(interpolated_modal_coeffs[mode_idx], dtype=np.float64)
+        fft_interp = np.abs(np.fft.rfft(interp_mode))
+        ax_fft.plot(freqs, fft_interp, label="Interpolated", linewidth=2)
+
+        for Re in Re_neighbors:
+            neighbor_mode = np.array(modal_coeffs_neighbors_forecasted[Re][mode_idx], dtype=np.float64)
+            fft_neighbor = np.abs(np.fft.rfft(neighbor_mode))
+            ax_fft.plot(freqs, fft_neighbor, '--', label=f"Trained Re {Re}", alpha=0.7)
+
+        ax_fft.set_ylabel("Spectral Amplitude")
+        ax_fft.set_title(f"Mode {mode_idx} — Interpolated vs Trained Neighbors")
+        ax_fft.grid(True)
+        ax_fft.legend()
+
+    axes[-1].set_xlabel("Frequency [Hz]")
+    plt.tight_layout(rect=[0, 0.03, 1, 0.96])
+    plt.show()
+
+
+def plot_flow_comparison_interpolated_dmd_vs_true(
+    pdmd,
+    snapshot_test,
+    sampled_times_test,
+    loader_test,
+    mask_test,
+    num_points_test,
+    norm_scale,
+    mean_flow,
+    Re_test,
+    t_start,
+    t_end,
+    granularity,
+    dt_phys=0.01,
+    cmap="jet"
+):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import matplotlib.tri as mtri
+
+    # Reconstruct forecast time vector
+    forecast_times_physical = 15.0 + (np.array(pdmd.dmd_timesteps) - 500) * dt_phys
+
+    # Filter forecast times
+    step = max(1, int(granularity / dt_phys))
+    filtered_times_forecast = [t for t in forecast_times_physical if t_start <= t <= t_end][::step]
+
+    # Fallback if none found
+    if len(filtered_times_forecast) == 0:
+        print("⚠️ No forecast times found — expanding window by 0.5s.")
+        t_start -= 0.25
+        t_end += 0.25
+        filtered_times_forecast = [t for t in forecast_times_physical if t_start <= t <= t_end][::step]
+
+    print("Filtered forecast times:", filtered_times_forecast)
+
+    # Match to true snapshot indices
+    sampled_times_test_float = np.array(sampled_times_test, dtype=float)
+    matched_true_indices = []
+    for t in filtered_times_forecast:
+        diffs = np.abs(sampled_times_test_float - t)
+        min_diff = np.min(diffs)
+        matched_true_indices.append(np.argmin(diffs) if min_diff < 1e-2 else None)
+
+    # Match to forecast indices
+    forecast_indices = []
+    for t in filtered_times_forecast:
+        idx = np.where(np.isclose(forecast_times_physical, t, atol=1e-6))[0]
+        forecast_indices.append(idx[0] if len(idx) > 0 else None)
+
+    # Spatial setup
+    coords_test = loader_test.vertices[mask_test.numpy(), :]
+    triang_test = mtri.Triangulation(coords_test[:, 0], coords_test[:, 1])
+
+    # Forecasted snapshots
+    forecasted_snapshots = pdmd.reconstructed_data[0]
+
+    # Plotting
+    num_rows = len(filtered_times_forecast)
+    fig, axes = plt.subplots(num_rows, 3, figsize=(14, 4 * num_rows))
+    fig.suptitle(f"DMD Forecast vs. True Velocity Magnitude at Re = {Re_test}", fontsize=20)
+
+    if num_rows == 1:
+        axes = np.expand_dims(axes, axis=0)
+
+    for row in range(num_rows):
+        t = filtered_times_forecast[row]
+        true_idx = matched_true_indices[row]
+        forecast_idx = forecast_indices[row]
+        if true_idx is None or forecast_idx is None:
+            continue
+
+        # True field
+        u_x_true = snapshot_test[:num_points_test, true_idx]
+        u_y_true = snapshot_test[num_points_test:, true_idx]
+        mag_true = np.sqrt(u_x_true**2 + u_y_true**2)
+
+        # Forecast field
+        U_raw = forecasted_snapshots[:, forecast_idx]
+        U_forecast = U_raw * norm_scale + mean_flow
+        u_x_forecast = U_forecast[:num_points_test]
+        u_y_forecast = U_forecast[num_points_test:]
+        mag_forecast = np.sqrt(u_x_forecast**2 + u_y_forecast**2)
+
+        # Error field
+        error_field = mag_true - mag_forecast
+
+        # Plot true
+        ax_true = axes[row, 0]
+        contour_true = ax_true.tricontourf(triang_test, mag_true, levels=50, cmap=cmap)
+        ax_true.set_title(f"True magnitude t = {t:.2f}s", fontsize=12)
+        ax_true.axis('equal')
+        ax_true.axis('off')
+        fig.colorbar(contour_true, ax=ax_true)
+
+        # Plot forecast
+        ax_forecast = axes[row, 1]
+        contour_forecast = ax_forecast.tricontourf(triang_test, mag_forecast, levels=50, cmap=cmap)
+        ax_forecast.set_title(f"Interpolated DMD reconstruction t = {t:.2f}s", fontsize=12)
+        ax_forecast.axis('equal')
+        ax_forecast.axis('off')
+        fig.colorbar(contour_forecast, ax=ax_forecast)
+
+        # Plot error
+        ax_error = axes[row, 2]
+        contour_error = ax_error.tricontourf(triang_test, np.abs(error_field), levels=50, cmap=cmap)
+        ax_error.set_title("Residual (True - DMD)", fontsize=12)
+        ax_error.axis('equal')
+        ax_error.axis('off')
+        fig.colorbar(contour_error, ax=ax_error)
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()
+
