@@ -300,140 +300,179 @@ def plot_flow_comparison_dmd_vs_true(
     plt.subplots_adjust(top=0.95, bottom=0.05, left=0.04, right=0.98, hspace=0.6, wspace=0.4)
     plt.show()
 
-def plot_dmd_modal_comparison_interp_vs_neighbors(
+def plot_dmd_modal_comparison_interp_vs_true(
     pdmd,
-    cached_dmd_list,
-    Re_list,
+    snapshot_test,
+    loader_test,
+    mean_flow,
+    Re_test,
+    dt_phys=0.01,
+    t0_phys=15.0,
     n_modes_to_plot=6,
-    neighbor_distance=10,
-    figsize=(10, 2.8),
-    cmap=None
+    match_tolerance=0.05,
+    time_window=(3.0, 20.0)
 ):
-
-    # Step 1: Extract interpolated modal coefficients
-    interpolated_modal_coeffs = pdmd.interpolated_modal_coefficients[0]  # shape: (r, n_forecast)
-
-    # Step 2: Reconstruct forecast time vector
-    dt = pdmd.dmd_time["dt"]
-    t0_forecast = pdmd.dmd_time["t0"]
-    n_forecast = interpolated_modal_coeffs.shape[1]
-    time_forecast = np.arange(n_forecast) * dt + t0_forecast
-
-    # Step 3: Identify neighboring Re values
-    Re_interp = pdmd.parameters[0, 0]
-    Re_neighbors = [Re for Re in Re_list if abs(Re - Re_interp) == neighbor_distance]
-
-    # Step 4: Forecast modal coefficients for neighboring Re values
-    modal_coeffs_neighbors_forecasted = {}
-    for Re in Re_neighbors:
-        i = np.where(Re_list == Re)[0][0]
-        dmd = cached_dmd_list[i]
-        dmd.dmd_time = pdmd.dmd_time  # ensure same forecast window
-        coeffs = dmd.reconstructed_data  # shape: (r, n_forecast)
-        modal_coeffs_neighbors_forecasted[Re] = coeffs
-
-    # Step 5: Plot each mode separately
-    fig, axes = plt.subplots(
-        n_modes_to_plot, 1,
-        figsize=(figsize[0], figsize[1] * n_modes_to_plot),
-        sharex=True
-    )
-
-    for mode_idx in range(n_modes_to_plot):
-        ax = axes[mode_idx]
-
-        # Interpolated mode
-        ax.plot(
-            time_forecast,
-            interpolated_modal_coeffs[mode_idx],
-            label=f"Interpolated",
-            linewidth=2
-        )
-
-        # Neighboring forecasted modes
-        for Re in Re_neighbors:
-            coeffs = modal_coeffs_neighbors_forecasted[Re]
-            ax.plot(
-                time_forecast,
-                coeffs[mode_idx],
-                '--',
-                label=f"Trained Re {Re}",
-                alpha=0.7
-            )
-
-        ax.set_ylabel("Amplitude")
-        ax.set_title(f"Mode {mode_idx} — Interpolated vs Trained Neighbors")
-        ax.grid(True)
-        ax.legend()
-
-    axes[-1].set_xlabel("Physical Time [s]")
-    fig.suptitle(
-        f"DMD Modal Coefficients for Interpolated (Re = {Re_interp}) vs Trained Neighboring Re",
-        fontsize=16
-    )
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
-    plt.show()
-
-def plot_interpolated_modal_fft_comparison(pdmd, Re_list, cached_dmd_list, n_modes_to_plot=6):
     """
-    Plot FFTs of interpolated DMD modal coefficients vs trained neighbors.
+    Plot DMD modal coefficient comparison between interpolated and true data at a given test Reynolds number.
 
     Parameters:
-    - pdmd: ParametricDMD object containing interpolated modal coefficients and forecast time info
-    - Re_list: list or array of Reynolds numbers used in training
-    - cached_dmd_list: list of trained DMD models aligned with Re_list
-    - n_modes_to_plot: number of DMD modes to visualize (default: 6)
+    - pdmd: Fitted ParametricDMD object
+    - snapshot_test: Snapshot matrix for Re_test (shape: space_dim x n_time)
+    - loader_test: FOAMDataloader object used to access metadata
+    - mean_flow: Mean flow vector used during training (shape: space_dim,)
+    - Re_test: Reynolds number of the test data
+    - dt_phys: Time step used in forecast (default: 0.01)
+    - t0_phys: Starting time of forecast (default: 15.0)
+    - n_modes_to_plot: Number of modes to visualize (default: 6)
+    - match_tolerance: Time matching tolerance in seconds (default: 0.05)
+    - time_window: Tuple specifying the time range to extract from loader_test (default: (3.0, 20.0))
     """
     import numpy as np
     import matplotlib.pyplot as plt
 
-    # Extract interpolated modal coefficients
-    interpolated_modal_coeffs = pdmd.interpolated_modal_coefficients[0]  # shape: (r, n_forecast)
+    # Step 0: Extract sampled_times_test from loader
+    sampled_times_test = [t for t in loader_test.write_times if time_window[0] <= float(t) <= time_window[1]]
+    sampled_times_test_float = np.array(sampled_times_test, dtype=float)
 
-    # Reconstruct forecast time vector
-    dt = pdmd.dmd_time["dt"]
-    t0_forecast = pdmd.dmd_time["t0"]
+    # Step 1: Reconstruct forecast time vector
+    interpolated_modal_coeffs = pdmd.interpolated_modal_coefficients[0]
     n_forecast = interpolated_modal_coeffs.shape[1]
-    time_forecast = np.arange(n_forecast) * dt + t0_forecast
+    forecast_times = np.arange(n_forecast) * dt_phys + t0_phys
 
-    # Identify neighboring Re values
+    # Step 2: Match forecast times to test snapshot times
+    matched_true_indices = []
+    forecast_indices = []
+
+    for i, t in enumerate(forecast_times):
+        diffs = np.abs(sampled_times_test_float - t)
+        min_diff = np.min(diffs)
+        if min_diff < match_tolerance:
+            matched_true_indices.append(np.argmin(diffs))
+            forecast_indices.append(i)
+
+    if not matched_true_indices:
+        print("❌ No valid time matches found.")
+        return
+
+    # Step 3: Preprocess test snapshots
+    snapshot_test_aligned = snapshot_test[:, [t for _, t in zip(forecast_indices, matched_true_indices)]].copy()
+    snapshot_test_aligned -= mean_flow[:, np.newaxis]
+    snapshot_test_aligned /= np.linalg.norm(snapshot_test_aligned)
+
+    # Step 4: Project onto training POD basis
+    true_modal_coeffs_aligned = pdmd._spatial_pod.reduce(snapshot_test_aligned)
+    aligned_times = [forecast_times[f] for f in forecast_indices]
     Re_interp = pdmd.parameters[0, 0]
-    Re_neighbors = [Re for Re in Re_list if abs(Re - Re_interp) == 10]
 
-    # Forecast modal coefficients for neighboring Re values
-    modal_coeffs_neighbors_forecasted = {}
-    for Re in Re_neighbors:
-        i = np.where(Re_list == Re)[0][0]
-        dmd = cached_dmd_list[i]
-        dmd.dmd_time = pdmd.dmd_time  # ensure same forecast window
-        coeffs = dmd.reconstructed_data  # shape: (r, n_forecast)
-        modal_coeffs_neighbors_forecasted[Re] = coeffs
-
-    # Plot FFTs
-    fig, axes = plt.subplots(n_modes_to_plot, 1, figsize=(12, 3.2 * n_modes_to_plot), sharex=True)
-    fig.suptitle(f"FFT of DMD Modal Coefficients — Interpolated Re = {Re_interp}", fontsize=18)
-
-    freqs = np.fft.rfftfreq(n_forecast, d=dt)
+    # Step 5: Plot modal comparison
+    fig, axes = plt.subplots(n_modes_to_plot, 1, figsize=(10, 2.8 * n_modes_to_plot), sharex=True)
+    fig.suptitle(f"Modal Coefficient Comparison — Interpolated Re = {Re_interp} vs True Re = {Re_test}", fontsize=16)
 
     for mode_idx in range(n_modes_to_plot):
-        ax_fft = axes[mode_idx]
-        interp_mode = np.array(interpolated_modal_coeffs[mode_idx], dtype=np.float64)
+        ax = axes[mode_idx]
+        ax.plot(aligned_times, interpolated_modal_coeffs[mode_idx, forecast_indices].real,
+                label=f"Interpolated Mode {mode_idx}", linewidth=2, color="tab:blue")
+        ax.plot(aligned_times, true_modal_coeffs_aligned[mode_idx].real,
+                linestyle=':', label=f"True Mode {mode_idx}", linewidth=2, color="tab:orange")
+
+        ax.set_ylabel("Amplitude")
+        ax.set_title(f"Mode {mode_idx} — Interpolated vs True")
+        ax.grid(True)
+        ax.legend()
+
+    axes[-1].set_xlabel("Physical Time [s]")
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.show()
+
+
+
+def plot_fft_modal_comparison_interp_vs_true(
+    pdmd,
+    snapshot_test,
+    loader_test,
+    mean_flow,
+    Re_test,
+    dt_phys=0.01,
+    t0_phys=15.0,
+    n_modes_to_plot=6,
+    match_tolerance=0.05,
+    time_window=(3.0, 20.0)
+):
+    """
+    Plot FFT comparison of interpolated vs true DMD modal coefficients for a test Reynolds number.
+
+    Parameters:
+    - pdmd: Fitted ParametricDMD object
+    - snapshot_test: Snapshot matrix for Re_test (shape: space_dim x n_time)
+    - loader_test: FOAMDataloader object used to access metadata
+    - mean_flow: Mean flow vector used during training (shape: space_dim,)
+    - Re_test: Reynolds number of the test data
+    - dt_phys: Time step used in forecast (default: 0.01)
+    - t0_phys: Starting time of forecast (default: 15.0)
+    - n_modes_to_plot: Number of modes to visualize (default: 6)
+    - match_tolerance: Time matching tolerance in seconds (default: 0.05)
+    - time_window: Tuple specifying the time range to extract from loader_test (default: (3.0, 20.0))
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    # Step 0: Extract sampled_times_test from loader
+    sampled_times_test = [t for t in loader_test.write_times if time_window[0] <= float(t) <= time_window[1]]
+    sampled_times_test_float = np.array(sampled_times_test, dtype=float)
+
+    # Step 1: Reconstruct forecast time vector
+    interpolated_modal_coeffs = pdmd.interpolated_modal_coefficients[0]
+    n_forecast = interpolated_modal_coeffs.shape[1]
+    forecast_times = np.arange(n_forecast) * dt_phys + t0_phys
+
+    # Step 2: Match forecast times to test snapshot times
+    matched_true_indices = []
+    forecast_indices = []
+
+    for i, t in enumerate(forecast_times):
+        diffs = np.abs(sampled_times_test_float - t)
+        min_diff = np.min(diffs)
+        if min_diff < match_tolerance:
+            matched_true_indices.append(np.argmin(diffs))
+            forecast_indices.append(i)
+
+    valid_pairs = [(f_idx, t_idx) for f_idx, t_idx in zip(forecast_indices, matched_true_indices)]
+    if not valid_pairs:
+        print("❌ No valid time matches found.")
+        return
+
+    # Step 3: Align and normalize snapshots
+    snapshot_test_aligned = snapshot_test[:, [t for _, t in valid_pairs]].copy()
+    snapshot_test_aligned -= mean_flow[:, np.newaxis]
+    snapshot_test_aligned /= np.linalg.norm(snapshot_test_aligned)
+
+    # Step 4: Project onto POD basis
+    true_modal_coeffs_aligned = pdmd._spatial_pod.reduce(snapshot_test_aligned)
+
+    # Step 5: FFT comparison
+    freqs = np.fft.rfftfreq(len(valid_pairs), d=dt_phys)
+    fig, axes = plt.subplots(n_modes_to_plot, 1, figsize=(12, 3.2 * n_modes_to_plot), sharex=True)
+    fig.suptitle(f"FFT of Modal Coefficients — Interpolated vs True (Re = {Re_test})", fontsize=18)
+
+    for mode_idx in range(n_modes_to_plot):
+        ax = axes[mode_idx]
+        interp_mode = interpolated_modal_coeffs[mode_idx, [f for f, _ in valid_pairs]].real
         fft_interp = np.abs(np.fft.rfft(interp_mode))
-        ax_fft.plot(freqs, fft_interp, label="Interpolated", linewidth=2)
 
-        for Re in Re_neighbors:
-            neighbor_mode = np.array(modal_coeffs_neighbors_forecasted[Re][mode_idx], dtype=np.float64)
-            fft_neighbor = np.abs(np.fft.rfft(neighbor_mode))
-            ax_fft.plot(freqs, fft_neighbor, '--', label=f"Trained Re {Re}", alpha=0.7)
+        true_mode = true_modal_coeffs_aligned[mode_idx].real
+        fft_true = np.abs(np.fft.rfft(true_mode))
 
-        ax_fft.set_ylabel("Spectral Amplitude")
-        ax_fft.set_title(f"Mode {mode_idx} — Interpolated vs Trained Neighbors")
-        ax_fft.grid(True)
-        ax_fft.legend()
+        ax.plot(freqs, fft_interp, label="Interpolated", linewidth=2, color="tab:blue")
+        ax.plot(freqs, fft_true, linestyle=':', label="True", linewidth=2, color="tab:orange")
+        ax.set_ylabel("Spectral Amplitude")
+        ax.set_title(f"Mode {mode_idx} — Interpolated vs True")
+        ax.grid(True)
+        ax.legend()
 
     axes[-1].set_xlabel("Frequency [Hz]")
     plt.tight_layout(rect=[0, 0.03, 1, 0.96])
     plt.show()
+
 
 
 def plot_flow_comparison_interpolated_dmd_vs_true(
