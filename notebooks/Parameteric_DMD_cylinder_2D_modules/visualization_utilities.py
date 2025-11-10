@@ -276,6 +276,7 @@ def plot_flow_comparison_dmd_vs_true(
         # True
         ax_true = axes[row, 0]
         contour_true = ax_true.tricontourf(tri, mag_true, levels=50, cmap=cmap, vmin=vmin_vel, vmax=vmax_vel)
+        ax_true.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))  
         ax_true.set_title(f"{titles[0]} — t = {t_val:.2f}s", fontsize=14, pad=12)
         ax_true.axis('equal')
         ax_true.axis('off')
@@ -284,6 +285,7 @@ def plot_flow_comparison_dmd_vs_true(
         # DMD
         ax_dmd = axes[row, 1]
         contour_dmd = ax_dmd.tricontourf(tri, mag_dmd, levels=50, cmap=cmap, vmin=vmin_vel, vmax=vmax_vel)
+        ax_dmd.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))  
         ax_dmd.set_title(f"{titles[1]} — t = {t_val:.2f}s", fontsize=14, pad=12)
         ax_dmd.axis('equal')
         ax_dmd.axis('off')
@@ -292,13 +294,16 @@ def plot_flow_comparison_dmd_vs_true(
         # Residual
         ax_res = axes[row, 2]
         contour_res = ax_res.tricontourf(tri, residual, levels=50, cmap=cmap)
+        ax_res.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))  
         ax_res.set_title(f"{titles[2]} — t = {t_val:.2f}s", fontsize=14, pad=12)
         ax_res.axis('equal')
         ax_res.axis('off')
         fig.colorbar(contour_res, ax=ax_res, shrink=0.85, pad=0.02)
 
+
     plt.subplots_adjust(top=0.95, bottom=0.05, left=0.04, right=0.98, hspace=0.6, wspace=0.4)
     plt.show()
+
 
 def plot_dmd_modal_comparison_interp_vs_true(
     pdmd,
@@ -491,9 +496,7 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
     dt_phys=0.01,
     cmap="jet"
 ):
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import matplotlib.tri as mtri
+
 
     # Reconstruct forecast time vector
     forecast_times_physical = 15.0 + (np.array(pdmd.dmd_timesteps) - 500) * dt_phys
@@ -565,6 +568,7 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
         # Plot true
         ax_true = axes[row, 0]
         contour_true = ax_true.tricontourf(triang_test, mag_true, levels=50, cmap=cmap)
+        ax_true.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))
         ax_true.set_title(f"True magnitude t = {t:.2f}s", fontsize=12)
         ax_true.axis('equal')
         ax_true.axis('off')
@@ -573,6 +577,7 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
         # Plot forecast
         ax_forecast = axes[row, 1]
         contour_forecast = ax_forecast.tricontourf(triang_test, mag_forecast, levels=50, cmap=cmap)
+        ax_forecast.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))
         ax_forecast.set_title(f"Interpolated DMD reconstruction t = {t:.2f}s", fontsize=12)
         ax_forecast.axis('equal')
         ax_forecast.axis('off')
@@ -581,6 +586,7 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
         # Plot error
         ax_error = axes[row, 2]
         contour_error = ax_error.tricontourf(triang_test, np.abs(error_field), levels=50, cmap=cmap)
+        ax_error.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))
         ax_error.set_title("Residual (True - DMD)", fontsize=12)
         ax_error.axis('equal')
         ax_error.axis('off')
@@ -588,4 +594,3 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
-
