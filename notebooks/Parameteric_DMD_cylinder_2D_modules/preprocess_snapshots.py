@@ -50,3 +50,40 @@ def preprocess_snapshots(snapshot_dict, Re_list):
     print("train_snapshots shape:", train_snapshots.shape)
 
     return train_snapshots, mean_flow, snapshot_processed_dict, norm_scales
+
+
+def compute_average_inlet_velocity(loader, tol=1e-3, time=None):
+    """
+    Computes the average inlet velocity magnitude at a given time by automatically
+    detecting the inlet as the face with the minimum x-coordinate.
+
+    Parameters:
+    - loader: FOAMDataloader instance for a given Re case
+    - tol: tolerance for identifying inlet points near the minimum x-coordinate
+    - time: time step to extract velocity from (default: first available)
+
+    Returns:
+    - U_infty: average velocity magnitude at the inlet
+    """
+    if time is None:
+        time = loader.write_times[0]  # use first available time if not specified
+
+    snapshot = loader.load_snapshot("U", time)  # shape: (n_points, 3)
+    vertices = loader.vertices[:, :2]  # shape: (n_points, 2)
+
+    if hasattr(vertices, "detach"):
+        vertices = vertices.detach().cpu().numpy()
+
+    inlet_x = np.min(vertices[:, 0])
+    inlet_mask = np.abs(vertices[:, 0] - inlet_x) < tol
+    if not inlet_mask.any():
+        raise ValueError(f"No inlet points found at x ≈ {inlet_x:.6f} (tol={tol})")
+
+    u_inlet = snapshot[inlet_mask, 0]
+    v_inlet = snapshot[inlet_mask, 1]
+    if hasattr(u_inlet, "detach"):
+        u_inlet = u_inlet.detach().cpu().numpy()
+        v_inlet = v_inlet.detach().cpu().numpy()
+
+    U_infty = np.mean(np.sqrt(u_inlet**2 + v_inlet**2))
+    return U_infty

@@ -3,22 +3,23 @@ import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import seaborn as sns
 
-def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
+def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list, loader_dict=None, normalize_by_inlet=True):
     """
-    Plots the velocity magnitude over time for each Reynolds number.
+    Plots velocity magnitude over time for each Reynolds number.
+    Optionally normalizes by average inlet velocity computed from loader.
+    """
+    from preprocess_snapshots import compute_average_inlet_velocity
 
-    Parameters:
-    - snapshot_dict: Dictionary of velocity snapshots per Reynolds number.
-    - sampled_times_dict: Dictionary of time steps per Reynolds number.
-    - Re_list: List of Reynolds numbers to plot.
-    """
     n_re = len(Re_list)
     fig, axes = plt.subplots(n_re, 1, figsize=(12, 3 * n_re), sharex=True)
 
     for i, Re in enumerate(Re_list):
         mags = np.linalg.norm(snapshot_dict[Re], axis=0)
-        times = np.array(sampled_times_dict[Re], dtype=float)
 
+        if normalize_by_inlet and loader_dict is not None:
+            U_infty = compute_average_inlet_velocity(loader_dict[Re])
+            mags = mags / U_infty  
+        times = np.array(sampled_times_dict[Re], dtype=float)
         ax = axes[i]
         ax.plot(times, mags, label=f"Re={Re}", color='tab:blue')
         ax.set_ylabel("Velocity Magnitude")
@@ -35,7 +36,7 @@ def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
             ax.set_xlim(t_start - margin, t_end + margin)
 
     axes[-1].set_xlabel("Time (s)")
-    plt.suptitle("Snapshot Magnitudes Over Time Across Reynolds Numbers", fontsize=16)
+    plt.suptitle("Normalized Velocity Field Over Time Across Reynolds Numbers", fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
     plt.show()
 
