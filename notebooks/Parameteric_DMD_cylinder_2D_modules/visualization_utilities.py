@@ -372,7 +372,10 @@ def plot_dmd_modal_comparison_interp_vs_true(
 
     # Step 5: Plot modal comparison
     fig, axes = plt.subplots(n_modes_to_plot, 1, figsize=(10, 2.8 * n_modes_to_plot), sharex=True)
-    fig.suptitle(f"Modal Coefficient Comparison — Interpolated Re = {Re_interp} vs True Re = {Re_test}", fontsize=16)
+    ffig.suptitle(
+        f"Modal Coefficient Comparison — Noise {level}%  Interpolated Re = {Re_interp}",
+        fontsize=16
+    )
 
     for mode_idx in range(n_modes_to_plot):
         ax = axes[mode_idx]
@@ -539,7 +542,7 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
     # Plotting
     num_rows = len(filtered_times_forecast)
     fig, axes = plt.subplots(num_rows, 3, figsize=(14, 4 * num_rows))
-    fig.suptitle(f"DMD Forecast vs. True Velocity Magnitude at Re = {Re_test}", fontsize=20)
+    fig.suptitle(f"Flow Comparison — DMD Forecast vs True (Re = {Re_test})", fontsize=20)
 
     if num_rows == 1:
         axes = np.expand_dims(axes, axis=0)
