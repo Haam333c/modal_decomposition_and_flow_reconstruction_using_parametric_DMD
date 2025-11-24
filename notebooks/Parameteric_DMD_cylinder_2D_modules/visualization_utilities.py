@@ -2,23 +2,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import seaborn as sns
+from sklearn.utils.extmath import randomized_svd
 
-def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list, loader_dict=None, normalize_by_inlet=True):
+def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
     """
-    Plots velocity magnitude over time for each Reynolds number.
-    Optionally normalizes by average inlet velocity computed from loader.
+    Plots raw velocity magnitude over time for each Reynolds number.
     """
-    from preprocess_snapshots import compute_average_inlet_velocity
-
     n_re = len(Re_list)
     fig, axes = plt.subplots(n_re, 1, figsize=(12, 3 * n_re), sharex=True)
 
     for i, Re in enumerate(Re_list):
+        # Global snapshot magnitudes (L2 norm over space at each sampled time)
         mags = np.linalg.norm(snapshot_dict[Re], axis=0)
 
-        if normalize_by_inlet and loader_dict is not None:
-            U_infty = compute_average_inlet_velocity(loader_dict[Re])
-            mags = mags / U_infty  
         times = np.array(sampled_times_dict[Re], dtype=float)
         ax = axes[i]
         ax.plot(times, mags, label=f"Re={Re}", color='tab:blue')
@@ -27,6 +23,7 @@ def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list, loader_
         ax.grid(True)
         ax.legend()
 
+        # Auto zoom to active region
         threshold = 0.01 * np.max(mags)
         active_indices = np.where(mags > threshold)[0]
         if len(active_indices) > 0:
@@ -36,11 +33,11 @@ def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list, loader_
             ax.set_xlim(t_start - margin, t_end + margin)
 
     axes[-1].set_xlabel("Time (s)")
-    plt.suptitle("Normalized Velocity Field Over Time Across Reynolds Numbers", fontsize=16)
+    plt.suptitle("Snapshot Velocity Field Over Time Across Reynolds Numbers", fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
     plt.show()
 
-from sklearn.utils.extmath import randomized_svd
+
 
 def compute_pod(snapshot_dict, Re_list, n_components=100):
     snapshot_matrix = np.hstack([snapshot_dict[Re] for Re in Re_list])

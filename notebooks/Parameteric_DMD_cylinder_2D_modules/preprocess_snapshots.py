@@ -1,6 +1,6 @@
 import numpy as np
 
-def preprocess_snapshots(snapshot_dict, Re_list):
+def preprocess_snapshots(snapshot_dict, Re_list, Re_test=None):
     """
     Preprocesses velocity snapshots by subtracting the mean flow and normalizing each block.
 
@@ -9,16 +9,18 @@ def preprocess_snapshots(snapshot_dict, Re_list):
     2. Compute mean flow from the stacked data.
     3. Subtract mean flow and normalize each snapshot block.
     4. Stack normalized snapshots into a 3D array.
+    5. Optionally process a test Reynolds number with the same mean flow.
 
     Parameters:
     - snapshot_dict: Dictionary of raw velocity snapshots per Reynolds number.
     - Re_list: List of Reynolds numbers used for training.
+    - Re_test: Optional test Reynolds number to preprocess with same mean flow.
 
     Returns:
     - train_snapshots: Array of shape (n_Re, space_dim, n_time)
     - mean_flow: Mean flow vector of shape (space_dim,)
-    - snapshot_processed_dict: Dictionary of normalized snapshots per Re
-    - norm_scales: Dictionary of normalization scales per Re
+    - snapshot_processed_dict: Dictionary of normalized snapshots per Re (includes test if provided)
+    - norm_scales: Dictionary of normalization scales per Re (includes test if provided)
     """
     # Step 1: Stack all training snapshots across Re and time
     all_training_snapshots = np.concatenate([
@@ -29,10 +31,9 @@ def preprocess_snapshots(snapshot_dict, Re_list):
     mean_flow = np.mean(all_training_snapshots, axis=0)  # shape: (space_dim,)
     print("Mean flow computed from training window Shape:", mean_flow.shape)
 
-    # Step 3: Subtract mean and normalize
+    # Step 3: Subtract mean and normalize training blocks
     snapshot_processed_dict = {}
     norm_scales = {}
-
     for Re in Re_list:
         snapshots = snapshot_dict[Re].copy()
         snapshots -= mean_flow[:, np.newaxis]
@@ -43,11 +44,19 @@ def preprocess_snapshots(snapshot_dict, Re_list):
 
     print("Mean flow subtracted and snapshots normalized for each snapshot matrix.")
 
-    # Step 4: Stack normalized snapshots
-    train_snapshots = np.array([
-        snapshot_processed_dict[Re] for Re in Re_list
-    ])
+    # Step 4: Stack normalized training snapshots
+    train_snapshots = np.array([snapshot_processed_dict[Re] for Re in Re_list])
     print("train_snapshots shape:", train_snapshots.shape)
+
+    # Step 5: Optionally process test Re
+    if Re_test is not None:
+        snapshots = snapshot_dict[Re_test].copy()
+        snapshots -= mean_flow[:, np.newaxis]
+        norm = np.linalg.norm(snapshots)
+        snapshots /= norm
+        snapshot_processed_dict[Re_test] = snapshots
+        norm_scales[Re_test] = norm
+        print(f"Test Re={Re_test}: processed shape = {snapshots.shape}, norm scale = {norm:.4f}")
 
     return train_snapshots, mean_flow, snapshot_processed_dict, norm_scales
 
