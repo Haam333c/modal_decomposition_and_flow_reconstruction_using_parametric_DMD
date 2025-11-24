@@ -6,7 +6,7 @@ from sklearn.utils.extmath import randomized_svd
 
 def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
     """
-    Plots raw velocity magnitude over time for each Reynolds number.
+    Plots raw snapshot velocity magnitudes over time for each Reynolds number.
     """
     n_re = len(Re_list)
     fig, axes = plt.subplots(n_re, 1, figsize=(12, 3 * n_re), sharex=True)
@@ -15,6 +15,7 @@ def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
         # Global snapshot magnitudes (L2 norm over space at each sampled time)
         mags = np.linalg.norm(snapshot_dict[Re], axis=0)
 
+        # Plot
         times = np.array(sampled_times_dict[Re], dtype=float)
         ax = axes[i]
         ax.plot(times, mags, label=f"Re={Re}", color='tab:blue')
@@ -23,19 +24,12 @@ def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
         ax.grid(True)
         ax.legend()
 
-        # Auto zoom to active region
-        threshold = 0.01 * np.max(mags)
-        active_indices = np.where(mags > threshold)[0]
-        if len(active_indices) > 0:
-            t_start = times[active_indices[0]]
-            t_end = times[active_indices[-1]]
-            margin = 0.5
-            ax.set_xlim(t_start - margin, t_end + margin)
-
     axes[-1].set_xlabel("Time (s)")
-    plt.suptitle("Snapshot Velocity Field Over Time Across Reynolds Numbers", fontsize=16)
+    plt.suptitle("Snapshot velocity magnitudes over time across each parameter", fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
     plt.show()
+
+
 
 
 
