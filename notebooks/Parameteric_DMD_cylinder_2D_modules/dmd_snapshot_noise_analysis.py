@@ -56,46 +56,51 @@ def plot_noisy_snapshot_magnitudes(train_snapshots: np.ndarray,
                                    param_index: int = 0):
     """
     Plot clean vs noisy snapshot magnitudes for a given parameter index.
-
-    Parameters:
-    - train_snapshots: ndarray of shape (n_Re, space_dim, n_time)
-    - snapshot_noisy_dict: dict of noisy snapshots keyed by noise level
-    - sampled_times_dict: dict of time vectors per Re
-    - Re_list: list of Reynolds numbers
-    - noise_levels: iterable of noise percentages
-    - param_index: which Re index to visualize
+    Assumes snapshots are already mean-subtracted and normalized.
+    Renormalizes noisy snapshots to match clean Frobenius norm before plotting.
     """
+    times = np.array(sampled_times_dict[Re_list[param_index]], dtype=float)
+
+    clean = train_snapshots[param_index]
+    clean_mag = np.linalg.norm(clean, axis=0)
+    clean_norm = np.linalg.norm(clean)
+
+    colors = {0: "royalblue", 10: "seagreen", 20: "darkorange", 40: "crimson"}
+
     fig, axarr = plt.subplots(2, 2, figsize=(12, 8), sharex=True)
     axarr = axarr.flatten()
 
-    times = np.array(sampled_times_dict[Re_list[param_index]], dtype=float)
-
-    # Clean snapshot magnitude
-    clean = train_snapshots[param_index]  # shape: (space_dim, n_time)
-    clean_mag = np.sqrt(np.sum(clean**2, axis=0))  # shape: (n_time,)
-
+    handles_all, labels_all = [], []
+    
+    fig.suptitle("Clean vs Noisy Snapshot Magnitudes", fontsize=18, y=1.1)
     for j, level in enumerate(noise_levels[:4]):
-        noisy = snapshot_noisy_dict[level][param_index]  # shape: (space_dim, n_time)
-        noisy_mag = np.sqrt(np.sum(noisy**2, axis=0))    # shape: (n_time,)
+        noisy = snapshot_noisy_dict[level][param_index]
+        noisy *= clean_norm / np.linalg.norm(noisy)
+        noisy_mag = np.linalg.norm(noisy, axis=0)
 
-        axarr[j].plot(times, clean_mag, lw=2, ls="--", c="k", label="Clean Magnitude")
-        axarr[j].plot(times, noisy_mag, lw=2, label="Noisy Magnitude", alpha=0.85)
-        axarr[j].set_title(rf"$l={level}\%$", fontsize=16)
+        h1, = axarr[j].plot(times, clean_mag, ls="--", c="black", lw=2, label="Clean Magnitude")
+        h2, = axarr[j].plot(times, noisy_mag, lw=2, c=colors[level],
+                            label=f"Noisy Magnitude ({level}%)", alpha=0.9)
+
+        axarr[j].set_title(rf"$l={level}\%$", fontsize=15)
         axarr[j].tick_params(labelsize=12)
-        axarr[j].grid(True, linestyle='--', linewidth=0.6, alpha=0.5)
+        axarr[j].grid(True, linestyle=":", linewidth=0.8, alpha=0.7)
         axarr[j].set_xlim(times[0], times[-1])
 
-    fig.suptitle("Clean vs Noisy Snapshot Magnitude", fontsize=18, y=1)
-    handles, labels = axarr[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=2,
-               bbox_to_anchor=(0.5, 1.15), fontsize=12)
-    fig.supxlabel(r"$t$", y=0.02, fontsize=14)
-    fig.text(-0.03, 0.5, "Velocity Magnitude", va='center',
-             rotation='vertical', fontsize=14)
+        handles_all.extend([h1, h2])
+        labels_all.extend(["Clean Magnitude", f"Noisy Magnitude ({level}%)"])
 
-    plt.tight_layout()
+    # Deduplicate legend entries
+    unique = dict(zip(labels_all, handles_all))
+    fig.legend(unique.values(), unique.keys(), loc="upper center", ncol=2,
+               bbox_to_anchor=(0.5, 1.03), fontsize=12, frameon=False)
+
+    
+    fig.supxlabel(r"$t$", fontsize=14)
+    fig.supylabel("Velocity Magnitude", fontsize=14)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
     plt.show()
-
 
 
 
