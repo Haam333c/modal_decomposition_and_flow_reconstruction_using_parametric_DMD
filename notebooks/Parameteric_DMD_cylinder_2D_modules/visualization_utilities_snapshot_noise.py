@@ -157,7 +157,7 @@ def plot_dmd_modal_comparison(
             ax.plot(times, modal_true[mode],
                     label=f"True Mode {mode}", color="tab:blue")
             ax.plot(times, modal_dmd[mode],
-                    label=f"DMD Mode {mode} ({level}% noise)",
+                    label=f"ParametericDMD Mode {mode}",
                     linestyle="--", color="tab:orange")
             ax.set_ylabel("Amplitude")
             ax.set_title(f"Mode {mode} — Re = {Re_target}")
@@ -239,7 +239,7 @@ def plot_dmd_modal_fft_comparison(
             ax = axes[mode]
             ax.plot(freqs, fft_true, color="tab:blue", label="True FFT")
             ax.plot(freqs, fft_dmd, color="tab:orange", linestyle="--",
-                    label=f"DMD FFT {level}% noise")
+                    label=f"ParametericDMD FFT")
             ax.set_ylabel("Spectral Amplitude")
             ax.set_title(f"Mode {mode} — Re {Re_target}")
             ax.grid(True)
@@ -248,8 +248,6 @@ def plot_dmd_modal_fft_comparison(
         axes[-1].set_xlabel("Frequency (Hz)")
         plt.tight_layout(rect=[0, 0, 1, 0.96])
         plt.show()
-
-
 
 def plot_dmd_reconstruction_error(
     pdmd_models,
@@ -460,7 +458,7 @@ def plot_interpolated_vs_true_modal_coeffs(
             ax = axes[mode_idx]
             ax.plot(aligned_times,
                     interpolated_modal_coeffs[mode_idx, forecast_indices].real,
-                    label=f"Interpolated Mode {mode_idx}",
+                    label=f"Interpolated ParametericDMD Mode {mode_idx}",
                     linewidth=2, color="tab:blue")
             ax.plot(aligned_times,
                     true_modal_coeffs_aligned[mode_idx].real,
@@ -567,12 +565,12 @@ def plot_fft_interpolated_vs_true_modal_coeffs(
             # Interpolated FFT
             interp_mode = interpolated_modal_coeffs[mode_idx, [f for f, _ in valid_pairs]].real
             fft_interp = np.abs(np.fft.rfft(interp_mode))
-            ax.plot(freqs, fft_interp, label="Interpolated", linewidth=2, color="tab:blue")
+            ax.plot(freqs, fft_interp, label="Interpolated ParametericDMD FFT", linewidth=2, color="tab:blue")
 
             # True FFT
             true_mode = true_modal_coeffs_aligned[mode_idx].real
             fft_true = np.abs(np.fft.rfft(true_mode))
-            ax.plot(freqs, fft_true, linestyle=':', label="True", linewidth=2, color="tab:orange")
+            ax.plot(freqs, fft_true, linestyle=':', label="True FFT", linewidth=2, color="tab:orange")
 
             ax.set_ylabel("Spectral Amplitude")
             ax.set_title(f"Mode {mode_idx} — Interpolated vs True")

@@ -126,8 +126,8 @@ def plot_dmd_modal_comparison(pdmd, Re_list, sampled_times_dict, Re_value, n_mod
 
     for mode in range(n_modes_to_plot):
         ax = axes[mode]
-        ax.plot(times, modal_true[mode], label=f"True Mode {mode} — Re = {Re_value}", color='tab:blue')
-        ax.plot(times, modal_dmd[mode], label=f"ParametricDMD Mode {mode} — Re = {Re_value}", linestyle='--', color='tab:orange')
+        ax.plot(times, modal_true[mode], label=f"True Mode {mode}", color='tab:blue')
+        ax.plot(times, modal_dmd[mode], label=f"ParametricDMD Mode {mode} ", linestyle='--', color='tab:orange')
         ax.set_ylabel("Amplitude")
         ax.set_title(f"Mode {mode} — Re = {Re_value}")
         ax.grid(True)
@@ -371,7 +371,7 @@ def plot_dmd_modal_comparison_interp_vs_true(
     for mode_idx in range(n_modes_to_plot):
         ax = axes[mode_idx]
         ax.plot(aligned_times, interpolated_modal_coeffs[mode_idx, forecast_indices].real,
-                label=f"Interpolated Mode {mode_idx}", linewidth=2, color="tab:blue")
+                label=f"Interpolated ParametericDMD Mode {mode_idx}", linewidth=2, color="tab:blue")
         ax.plot(aligned_times, true_modal_coeffs_aligned[mode_idx].real,
                 linestyle=':', label=f"True Mode {mode_idx}", linewidth=2, color="tab:orange")
 
@@ -462,7 +462,7 @@ def plot_fft_modal_comparison_interp_vs_true(
         true_mode = true_modal_coeffs_aligned[mode_idx].real
         fft_true = np.abs(np.fft.rfft(true_mode))
 
-        ax.plot(freqs, fft_interp, label="Interpolated", linewidth=2, color="tab:blue")
+        ax.plot(freqs, fft_interp, label="Interpolated ParametericDMD", linewidth=2, color="tab:blue")
         ax.plot(freqs, fft_true, linestyle=':', label="True", linewidth=2, color="tab:orange")
         ax.set_ylabel("Spectral Amplitude")
         ax.set_title(f"Mode {mode_idx} — Interpolated vs True")
