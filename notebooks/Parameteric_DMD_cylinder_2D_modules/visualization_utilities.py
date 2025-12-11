@@ -533,7 +533,7 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
     # Plotting
     num_rows = len(filtered_times_forecast)
     fig, axes = plt.subplots(num_rows, 3, figsize=(14, 4 * num_rows))
-    fig.suptitle(f"Flow Comparison — DMD Forecast vs True (Re = {Re_test})", fontsize=20)
+    fig.suptitle(f"Flow Comparison — ParametericDMD Interpolation vs True (Re = {Re_test})", fontsize=20)
 
     if num_rows == 1:
         axes = np.expand_dims(axes, axis=0)
@@ -573,7 +573,7 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
         ax_forecast = axes[row, 1]
         contour_forecast = ax_forecast.tricontourf(triang_test, mag_forecast, levels=50, cmap=cmap)
         ax_forecast.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))
-        ax_forecast.set_title(f"Interpolated DMD reconstruction t = {t:.2f}s", fontsize=12)
+        ax_forecast.set_title(f"Interpolated reconstruction t = {t:.2f}s", fontsize=12)
         ax_forecast.axis('equal')
         ax_forecast.axis('off')
         fig.colorbar(contour_forecast, ax=ax_forecast)
@@ -589,3 +589,4 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
+
