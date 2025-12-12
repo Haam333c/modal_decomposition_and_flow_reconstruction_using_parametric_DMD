@@ -126,13 +126,13 @@ def plot_dmd_modal_comparison(pdmd, Re_list, sampled_times_dict, Re_value, n_mod
 
     for mode in range(n_modes_to_plot):
         ax = axes[mode]
-        ax.plot(times, modal_true[mode], label=f"True Mode {mode}", color='tab:blue')
-        ax.plot(times, modal_dmd[mode], label=f"ParametricDMD Mode {mode} ", linestyle='--', color='tab:orange')
+        ax.plot(times, modal_true[mode], label=f"True", color='tab:blue')
+        ax.plot(times, modal_dmd[mode], label=f"ParametricDMD", linestyle='--', color='tab:orange')
         ax.set_ylabel("Amplitude")
-        ax.set_title(f"Mode {mode} — Re = {Re_value}")
+        ax.set_title(f"Mode $\Phi_{{{mode_idx}}}$")
         ax.grid(True)
         ax.legend()
-
+    fig.align_ylabels(axes)
     axes[-1].set_xlabel("Time ($t$ in seconds)", fontsize=14)
     plt.suptitle("DMD Modal Coefficients for the Training Parameters vs True Data", fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
@@ -177,13 +177,13 @@ def plot_dmd_fft_comparison(pdmd, Re_list, Re_target, n_plot=4, dt=0.01):
         ax.grid(True)
 
         # Subplot title
-        ax.set_title(f"Mode {mode} — Re {Re_target}")
+        ax.set_title(f"Mode $\Phi_{{{mode_idx}}}$")
 
         # Stacked legend labels
-        label1 = "True FFT"
-        label2 = "ParametricDMD FFT"
+        label1 = "True"
+        label2 = "ParametricDMD"
         ax.legend([line1, line2], [label1, label2])
-
+    fig.align_ylabels(axes)
     axes[-1].set_xlabel("Frequency (Hz)")
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.show()
@@ -258,7 +258,7 @@ def plot_flow_comparison_dmd_vs_true(
         axes = np.expand_dims(axes, axis=0)
 
     for row, (mag_true, mag_dmd, residual, t_val) in enumerate(fields_per_row):
-        titles = ["True Magnitude", "DMD reconstruction", "Residual (True − DMD)"]
+        titles = ["True Magnitude", "ParametericDMD reconstruction", "Residual $(U_{\mathrm{true}} - U_{\mathrm{DMD}})$"]
         vmin_vel = min(mag_true.min(), mag_dmd.min())
         vmax_vel = max(mag_true.max(), mag_dmd.max())
 
@@ -366,15 +366,15 @@ def plot_dmd_modal_comparison_interp_vs_true(
     for mode_idx in range(n_modes_to_plot):
         ax = axes[mode_idx]
         ax.plot(aligned_times, interpolated_modal_coeffs[mode_idx, forecast_indices].real,
-                label=f"Interpolated ParametericDMD Mode {mode_idx}", linewidth=2, color="tab:blue")
+                label=f"Interpolated ParametericDMD", linewidth=2, color="tab:blue")
         ax.plot(aligned_times, true_modal_coeffs_aligned[mode_idx].real,
                 linestyle=':', label=f"True Mode {mode_idx}", linewidth=2, color="tab:orange")
 
         ax.set_ylabel("Amplitude")
-        ax.set_title(f"Mode {mode_idx} — Interpolated vs True")
+        ax.set_title(f"Mode $\Phi_{{{mode_idx}}}$")
         ax.grid(True)
         ax.legend()
-
+    fig.align_ylabels(axes)
     axes[-1].set_xlabel("Time ($t$ in seconds)", fontsize=14)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.show()
@@ -460,10 +460,10 @@ def plot_fft_modal_comparison_interp_vs_true(
         ax.plot(freqs, fft_interp, label="Interpolated ParametericDMD", linewidth=2, color="tab:blue")
         ax.plot(freqs, fft_true, linestyle=':', label="True", linewidth=2, color="tab:orange")
         ax.set_ylabel("Spectral Amplitude")
-        ax.set_title(f"Mode {mode_idx} — Interpolated vs True")
+        ax.set_title(f"Mode $\Phi_{{{mode_idx}}}$")
         ax.grid(True)
         ax.legend()
-
+    fig.align_ylabels(axes)
     axes[-1].set_xlabel("Frequency [Hz]")
     plt.tight_layout(rect=[0, 0.03, 1, 0.96])
     plt.show()
@@ -577,7 +577,7 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
         ax_error = axes[row, 2]
         contour_error = ax_error.tricontourf(triang_test, np.abs(error_field), levels=50, cmap=cmap)
         ax_error.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))
-        ax_error.set_title("Residual (True - DMD)", fontsize=12)
+        ax_error.set_title("Residual $(U_{\mathrm{true}} - U_{\mathrm{interpolated}})$", fontsize=12)
         ax_error.axis('equal')
         ax_error.axis('off')
         fig.colorbar(contour_error, ax=ax_error)
