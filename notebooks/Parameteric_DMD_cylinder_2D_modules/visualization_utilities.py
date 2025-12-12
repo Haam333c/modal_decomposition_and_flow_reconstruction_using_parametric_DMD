@@ -24,7 +24,7 @@ def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
         ax.grid(True)
         ax.legend()
 
-    axes[-1].set_xlabel("Time (s)")
+    axes[-1].set_xlabel("Time ($t$ in seconds)", fontsize=14)
     plt.suptitle("Snapshot velocity magnitudes over time across each parameter", fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
     plt.show()
@@ -133,7 +133,7 @@ def plot_dmd_modal_comparison(pdmd, Re_list, sampled_times_dict, Re_value, n_mod
         ax.grid(True)
         ax.legend()
 
-    axes[-1].set_xlabel("Time (s)")
+    axes[-1].set_xlabel("Time ($t$ in seconds)", fontsize=14)
     plt.suptitle("DMD Modal Coefficients for the Training Parameters vs True Data", fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
     plt.show()
@@ -149,9 +149,6 @@ def plot_dmd_fft_comparison(pdmd, Re_list, Re_target, n_plot=4, dt=0.01):
     - n_plot: number of modes to plot
     - dt: time step size used during training
     """
-    import numpy as np
-    import matplotlib.pyplot as plt
-
     # Locate index for target Re
     i = np.where(Re_list == Re_target)[0][0]
 
@@ -324,8 +321,6 @@ def plot_dmd_modal_comparison_interp_vs_true(
     - match_tolerance: Time matching tolerance in seconds (default: 0.05)
     - time_window: Tuple specifying the time range to extract from loader_test (default: (3.0, 20.0))
     """
-    import numpy as np
-    import matplotlib.pyplot as plt
 
     # Step 0: Extract sampled_times_test from loader
     sampled_times_test = [t for t in loader_test.write_times if time_window[0] <= float(t) <= time_window[1]]
@@ -380,7 +375,7 @@ def plot_dmd_modal_comparison_interp_vs_true(
         ax.grid(True)
         ax.legend()
 
-    axes[-1].set_xlabel("Physical Time [s]")
+    axes[-1].set_xlabel("Time ($t$ in seconds)", fontsize=14)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.show()
 
