@@ -1,8 +1,16 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
+from matplotlib.patches import Circle
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
+from matplotlib.ticker import MaxNLocator
+from matplotlib.ticker import FixedLocator
+
 import seaborn as sns
+
 from sklearn.utils.extmath import randomized_svd
+
 
 def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
     """
@@ -18,17 +26,17 @@ def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
         # Plot
         times = np.array(sampled_times_dict[Re], dtype=float)
         ax = axes[i]
-        ax.plot(times, mags, label=f"Re={Re}", color='tab:blue')
-        ax.set_ylabel("Velocity Magnitude")
-        ax.set_title(f"Snapshot Magnitude Over Time — Re={Re}")
-        ax.grid(True)
-        ax.legend()
-
-    axes[-1].set_xlabel("Time ($t$ in seconds)", fontsize=14)
-    plt.suptitle("Snapshot velocity magnitudes over time across each parameter", fontsize=16)
-    plt.tight_layout(rect=[0, 0, 1, 0.97])
+        ax.plot(times, mags)
+        ax.set_ylabel("Velocity Magnitude", fontsize=12)
+        ax.set_title(f"$Re$ = {Re}", fontsize=14, pad=6)
+        ax.grid(True, alpha=0.6)
+        ax.legend(fontsize=16)
+    fig.align_ylabels(axes)
+    axes[-1].set_xlabel("Time ($t$ in seconds)", fontsize=16)
+    plt.suptitle("Snapshot Velocity Magnitudes For DMD Training Parameters",
+                 fontsize=18, y = 0.96)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.show()
-
 
 
 
@@ -48,6 +56,7 @@ def get_thresholds(residual_content, threshold=0.99, tau_list=None):
     tau_ranks = [(tau, np.where(residual_content > tau)[0][-1] + 1) for tau in tau_list]
     return num_modes_99, tau_ranks
 
+
 def plot_cumulative_energy(cumulative_energy, threshold, num_modes_99):
     plt.figure(figsize=(10, 5))
     plt.plot(np.arange(1, len(cumulative_energy) + 1), cumulative_energy, marker='o', label='Cumulative Energy')
@@ -64,13 +73,14 @@ def plot_cumulative_energy(cumulative_energy, threshold, num_modes_99):
     plt.xlim(x_min, x_max)
     plt.ylim(threshold - 0.05, 1.01)
 
-    plt.title("Cumulative Energy Retained by POD Modes", fontsize=13)
+    plt.title("Cumulative Energy Retained by POD Modes", fontsize=16, pad=10)
     plt.xlabel("Number of Modes")
     plt.ylabel("Cumulative Energy")
     plt.grid(True)
     plt.legend(fontsize=9)
     plt.tight_layout()
     plt.show()
+
 
 def plot_residual_energy(residual_content, tau_ranks):
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -93,7 +103,7 @@ def plot_residual_energy(residual_content, tau_ranks):
                 verticalalignment='center',
                 color='black')
 
-    ax.set_title("Residual Information Content (1 − Cumulative Energy)", fontsize=13)
+    ax.set_title("Residual Content (Cumulative Energy)", fontsize=16, pad=10)
     ax.set_xlabel("Number of Modes")
     ax.set_ylabel("Residual Energy")
     ax.grid(True)
@@ -101,26 +111,29 @@ def plot_residual_energy(residual_content, tau_ranks):
     plt.tight_layout()
     plt.show()
 
-def plot_dmd_modal_comparison(pdmd, Re_list, sampled_times_dict, Re_value, n_modes_to_plot=5):
+
+def plot_dmd_modal_comparison(pdmd, Re_list, sampled_times_dict,
+                              Re_value, n_modes_to_plot=5):
     """
-    Plots a comparison of true vs ParametricDMD modal coefficients for a given Reynolds number.
+    Plots a comparison of true vs ParametricDMD modal coefficients
+    for a given Reynolds number (non-noise pipeline).
 
     Parameters:
-    - pdmd: Fitted ParametricDMD object.
-    - Re_list: List of Reynolds numbers used in training.
-    - sampled_times_dict: Dictionary of physical time steps per Reynolds number.
-    - Re_value: Reynolds number to inspect (e.g., 300).
-    - n_modes_to_plot: Number of dominant modes to visualize (default: 5).
+    - pdmd: fitted ParametricDMD object
+    - Re_list: list/array of Reynolds numbers used in training
+    - sampled_times_dict: dict of physical time steps per Reynolds number
+    - Re_value: Reynolds number to inspect (e.g., 200)
+    - n_modes_to_plot: number of dominant modes to visualize (default: 5)
     """
     if Re_value not in Re_list:
         raise ValueError(f"Re = {Re_value} not found in Re_list")
 
     index = np.where(Re_list == Re_value)[0][0]
-
     times = np.array(sampled_times_dict[Re_value], dtype=float)
 
+    # Modal coefficients from the clean pipeline
     modal_true = pdmd.training_modal_coefficients[index]
-    modal_dmd  = pdmd._dmd[index].reconstructed_data[:, :modal_true.shape[1]]
+    modal_dmd = pdmd._dmd[index].reconstructed_data[:, :modal_true.shape[1]]
 
     fig, axes = plt.subplots(n_modes_to_plot, 1, figsize=(12, 3 * n_modes_to_plot), sharex=True)
 
@@ -128,15 +141,17 @@ def plot_dmd_modal_comparison(pdmd, Re_list, sampled_times_dict, Re_value, n_mod
         ax = axes[mode]
         ax.plot(times, modal_true[mode], label=f"True", color='tab:blue')
         ax.plot(times, modal_dmd[mode], label=f"ParametricDMD", linestyle='--', color='tab:orange')
-        ax.set_ylabel("Amplitude")
-        ax.set_title(f"Mode $\Phi_{{{mode_idx}}}$")
+        ax.set_ylabel(f"Amplitude", fontsize=14)
+        ax.set_title(f"Mode $\Phi_{{{mode}}}$", fontsize=14)
         ax.grid(True)
-        ax.legend()
+        ax.legend(fontsize=13)
     fig.align_ylabels(axes)
-    axes[-1].set_xlabel("Time ($t$ in seconds)", fontsize=14)
-    plt.suptitle("DMD Modal Coefficients for the Training Parameters vs True Data", fontsize=16)
+    axes[-1].set_xlabel("Time ($t$ in seconds)", fontsize=15)
+    plt.suptitle(f"Modal Coefficients Comparison — ParametericDMD vs True \n($Re$ = {Re_value})",fontsize=18, y=0.97)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
     plt.show()
+
+
 
 def plot_dmd_fft_comparison(pdmd, Re_list, Re_target, n_plot=4, dt=0.01):
     """
@@ -149,6 +164,7 @@ def plot_dmd_fft_comparison(pdmd, Re_list, Re_target, n_plot=4, dt=0.01):
     - n_plot: number of modes to plot
     - dt: time step size used during training
     """
+
     # Locate index for target Re
     i = np.where(Re_list == Re_target)[0][0]
 
@@ -162,7 +178,7 @@ def plot_dmd_fft_comparison(pdmd, Re_list, Re_target, n_plot=4, dt=0.01):
 
     # Plot
     fig, axes = plt.subplots(n_plot, 1, figsize=(10, 2.5 * n_plot), sharex=True)
-    fig.suptitle("Frequency Spectrum of DMD Modal Coefficients for the Training Parameter vs True Data", fontsize=14)
+    fig.suptitle(f"Frequency Spectrum of Modal Coefficients — ParametericDMD vs True \n($Re$ = {Re_target})", fontsize=16,y=0.96)
 
     for mode in range(n_plot):
         modal_true_clean = np.asarray(modal_true[mode], dtype=np.float64)
@@ -173,18 +189,18 @@ def plot_dmd_fft_comparison(pdmd, Re_list, Re_target, n_plot=4, dt=0.01):
         ax = axes[mode]
         line1, = ax.plot(freqs, fft_true, color="tab:blue")
         line2, = ax.plot(freqs, fft_dmd, color="tab:orange", linestyle="--")
-        ax.set_ylabel("Spectral Amplitude")
+        ax.set_ylabel(f"Spectral Amplitude", fontsize=12)
         ax.grid(True)
 
         # Subplot title
-        ax.set_title(f"Mode $\Phi_{{{mode_idx}}}$")
+        ax.set_title(f"Mode $\Phi_{{{mode}}}$", fontsize=12)
 
         # Stacked legend labels
         label1 = "True"
         label2 = "ParametricDMD"
         ax.legend([line1, line2], [label1, label2])
     fig.align_ylabels(axes)
-    axes[-1].set_xlabel("Frequency (Hz)")
+    axes[-1].set_xlabel("Frequency (Hz)", fontsize=14)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.show()
 
@@ -205,17 +221,14 @@ def plot_flow_comparison_dmd_vs_true(
     num_points_dict,
     cmap='icefire'
 ):
-   
-
     # Colormap setup
     if isinstance(cmap, str):
         cmap = sns.color_palette(cmap, as_cmap=True)
 
     # Time setup
     i = np.where(Re_list == Re_target)[0][0]
-
     time_vec = np.array(sampled_times_dict[Re_target], dtype=float)
-    selected_times = np.arange(t_start, t_end+ 1e-6, granularity)
+    selected_times = np.arange(t_start, t_end + 1e-6, granularity)
     t_indices = [np.where(np.isclose(time_vec, t, atol=1e-6))[0][0] for t in selected_times]
 
     # Spatial setup
@@ -245,53 +258,64 @@ def plot_flow_comparison_dmd_vs_true(
 
         fields_per_row.append((mag_true, mag_dmd, residual, time_vec[t_idx]))
 
-    # Plotting
-    fig_width = 16
-    fig_height_per_row = 4.2
-    n_rows = len(fields_per_row)
-    n_cols = 3
+    # Global scaling
+    mag_true_all = np.concatenate([f[0] for f in fields_per_row])
+    mag_dmd_all = np.concatenate([f[1] for f in fields_per_row])
+    global_min = min(mag_true_all.min(), mag_dmd_all.min())
+    global_max = max(mag_true_all.max(), mag_dmd_all.max())
+    fixed_ticks_main = np.linspace(global_min, global_max, 10)
+    sm_shared = ScalarMappable(norm=Normalize(vmin=global_min, vmax=global_max), cmap=cmap)
+    sm_shared.set_array([])
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_width, fig_height_per_row * n_rows))
-    fig.suptitle(f"Flow Comparison — DMD vs True (Re = {Re_target})", fontsize=20)
+    residual_all = np.concatenate([np.abs(f[2]) for f in fields_per_row])
+    resid_min, resid_max = residual_all.min(), residual_all.max()
+    fixed_ticks_resid = np.linspace(resid_min, resid_max, 10)
+    sm_resid = ScalarMappable(norm=Normalize(vmin=resid_min, vmax=resid_max), cmap=cmap)
+    sm_resid.set_array([])
+
+    # Plotting
+    n_rows = len(fields_per_row)
+    fig, axes = plt.subplots(n_rows, 3, figsize=(14, 3 * n_rows))
+    fig.suptitle(f"Flow Comparison — ParametricDMD vs True \n($Re$ = {Re_target})", fontsize=18, y=0.94)
 
     if n_rows == 1:
         axes = np.expand_dims(axes, axis=0)
 
     for row, (mag_true, mag_dmd, residual, t_val) in enumerate(fields_per_row):
-        titles = ["True Magnitude", "ParametericDMD reconstruction", "Residual $(U_{\mathrm{true}} - U_{\mathrm{DMD}})$"]
-        vmin_vel = min(mag_true.min(), mag_dmd.min())
-        vmax_vel = max(mag_true.max(), mag_dmd.max())
-
         # True
         ax_true = axes[row, 0]
-        contour_true = ax_true.tricontourf(tri, mag_true, levels=50, cmap=cmap, vmin=vmin_vel, vmax=vmax_vel)
-        ax_true.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))  
-        ax_true.set_title(f"{titles[0]} — t = {t_val:.2f}s", fontsize=14, pad=12)
-        ax_true.axis('equal')
-        ax_true.axis('off')
-        fig.colorbar(contour_true, ax=ax_true, shrink=0.85, pad=0.02)
+        ax_true.tricontourf(tri, mag_true, levels=200, cmap=cmap, vmin=global_min, vmax=global_max)
+        ax_true.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))
+        ax_true.set_aspect('equal'); ax_true.set_xticks([]); ax_true.set_yticks([])
+        for spine in ax_true.spines.values(): spine.set_visible(False)
+        fig.colorbar(sm_shared, ax=ax_true, shrink=0.75, pad=0.02, ticks=fixed_ticks_main)
+        ax_true.set_ylabel(f"$t$ = {t_val:.2f} s", fontsize=15, rotation=90, labelpad=25)
 
         # DMD
         ax_dmd = axes[row, 1]
-        contour_dmd = ax_dmd.tricontourf(tri, mag_dmd, levels=50, cmap=cmap, vmin=vmin_vel, vmax=vmax_vel)
-        ax_dmd.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))  
-        ax_dmd.set_title(f"{titles[1]} — t = {t_val:.2f}s", fontsize=14, pad=12)
-        ax_dmd.axis('equal')
-        ax_dmd.axis('off')
-        fig.colorbar(contour_dmd, ax=ax_dmd, shrink=0.85, pad=0.02)
+        ax_dmd.tricontourf(tri, mag_dmd, levels=200, cmap=cmap, vmin=global_min, vmax=global_max)
+        ax_dmd.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))
+        ax_dmd.set_aspect('equal'); ax_dmd.set_xticks([]); ax_dmd.set_yticks([])
+        for spine in ax_dmd.spines.values(): spine.set_visible(False)
+        fig.colorbar(sm_shared, ax=ax_dmd, shrink=0.75, pad=0.02, ticks=fixed_ticks_main)
 
         # Residual
         ax_res = axes[row, 2]
-        contour_res = ax_res.tricontourf(tri, residual, levels=50, cmap=cmap)
-        ax_res.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))  
-        ax_res.set_title(f"{titles[2]} — t = {t_val:.2f}s", fontsize=14, pad=12)
-        ax_res.axis('equal')
-        ax_res.axis('off')
-        fig.colorbar(contour_res, ax=ax_res, shrink=0.85, pad=0.02)
+        ax_res.tricontourf(tri, residual, levels=200, cmap=cmap, vmin=resid_min, vmax=resid_max)
+        ax_res.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))
+        ax_res.set_aspect('equal'); ax_res.set_xticks([]); ax_res.set_yticks([])
+        for spine in ax_res.spines.values(): spine.set_visible(False)
+        fig.colorbar(sm_resid, ax=ax_res, shrink=0.75, pad=0.02, ticks=fixed_ticks_resid)
 
+    # Column titles only once
+    axes[0, 0].set_title("True Magnitude", fontsize=15, pad=12)
+    axes[0, 1].set_title("ParametricDMD", fontsize=15, pad=12)
+    axes[0, 2].set_title(r"Residual $(U_{\mathrm{True}} - U_{\mathrm{ParametricDMD}})$", fontsize=15, pad=12)
 
-    plt.subplots_adjust(top=0.95, bottom=0.05, left=0.04, right=0.98, hspace=0.6, wspace=0.4)
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95], h_pad=1)
     plt.show()
+
+
 
 
 def plot_dmd_modal_comparison_interp_vs_true(
@@ -358,22 +382,19 @@ def plot_dmd_modal_comparison_interp_vs_true(
 
     # Step 5: Plot modal comparison
     fig, axes = plt.subplots(n_modes_to_plot, 1, figsize=(10, 2.8 * n_modes_to_plot), sharex=True)
-    ffig.suptitle(
-        f"Modal Coefficient Comparison — Noise {level}%  Interpolated Re = {Re_interp}",
-        fontsize=16
-    )
+    fig.suptitle(f"Modal Coefficient Comparison — ParametericDMD Interpolation vs True \n($Re$ = {Re_interp})", fontsize=16, y=0.96)
 
     for mode_idx in range(n_modes_to_plot):
         ax = axes[mode_idx]
-        ax.plot(aligned_times, interpolated_modal_coeffs[mode_idx, forecast_indices].real,
-                label=f"Interpolated ParametericDMD", linewidth=2, color="tab:blue")
         ax.plot(aligned_times, true_modal_coeffs_aligned[mode_idx].real,
-                linestyle=':', label=f"True Mode {mode_idx}", linewidth=2, color="tab:orange")
-
-        ax.set_ylabel("Amplitude")
-        ax.set_title(f"Mode $\Phi_{{{mode_idx}}}$")
+                linestyle=':', label=f"True", linewidth=2, color="tab:orange")
+        ax.plot(aligned_times, interpolated_modal_coeffs[mode_idx, forecast_indices].real,
+                label=f"Interpolated ParameteriDMD", linewidth=2, color="tab:blue")
+        
+        ax.set_ylabel(f"Amplitude", fontsize=13)
+        ax.set_title(f"Mode $\Phi_{{{mode_idx}}}$", fontsize =13)
         ax.grid(True)
-        ax.legend()
+        ax.legend(fontsize = 12)
     fig.align_ylabels(axes)
     axes[-1].set_xlabel("Time ($t$ in seconds)", fontsize=14)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
@@ -395,21 +416,7 @@ def plot_fft_modal_comparison_interp_vs_true(
 ):
     """
     Plot FFT comparison of interpolated vs true DMD modal coefficients for a test Reynolds number.
-
-    Parameters:
-    - pdmd: Fitted ParametricDMD object
-    - snapshot_test: Snapshot matrix for Re_test (shape: space_dim x n_time)
-    - loader_test: FOAMDataloader object used to access metadata
-    - mean_flow: Mean flow vector used during training (shape: space_dim,)
-    - Re_test: Reynolds number of the test data
-    - dt_phys: Time step used in forecast (default: 0.01)
-    - t0_phys: Starting time of forecast (default: 15.0)
-    - n_modes_to_plot: Number of modes to visualize (default: 6)
-    - match_tolerance: Time matching tolerance in seconds (default: 0.05)
-    - time_window: Tuple specifying the time range to extract from loader_test (default: (3.0, 20.0))
     """
-    import numpy as np
-    import matplotlib.pyplot as plt
 
     # Step 0: Extract sampled_times_test from loader
     sampled_times_test = [t for t in loader_test.write_times if time_window[0] <= float(t) <= time_window[1]]
@@ -423,7 +430,6 @@ def plot_fft_modal_comparison_interp_vs_true(
     # Step 2: Match forecast times to test snapshot times
     matched_true_indices = []
     forecast_indices = []
-
     for i, t in enumerate(forecast_times):
         diffs = np.abs(sampled_times_test_float - t)
         min_diff = np.min(diffs)
@@ -446,8 +452,11 @@ def plot_fft_modal_comparison_interp_vs_true(
 
     # Step 5: FFT comparison
     freqs = np.fft.rfftfreq(len(valid_pairs), d=dt_phys)
-    fig, axes = plt.subplots(n_modes_to_plot, 1, figsize=(12, 3.2 * n_modes_to_plot), sharex=True)
-    fig.suptitle(f"FFT of Modal Coefficients — Interpolated vs True (Re = {Re_test})", fontsize=18)
+    fig, axes = plt.subplots(n_modes_to_plot, 1, figsize=(10, 2.5 * n_modes_to_plot), sharex=True)
+    fig.suptitle(
+        f"Frequency Spectrum of Modal Coefficients — ParametricDMD Interpolation vs True\n($Re$ = {Re_test})",
+        fontsize=16, y=0.96
+    )
 
     for mode_idx in range(n_modes_to_plot):
         ax = axes[mode_idx]
@@ -457,16 +466,23 @@ def plot_fft_modal_comparison_interp_vs_true(
         true_mode = true_modal_coeffs_aligned[mode_idx].real
         fft_true = np.abs(np.fft.rfft(true_mode))
 
-        ax.plot(freqs, fft_interp, label="Interpolated ParametericDMD", linewidth=2, color="tab:blue")
-        ax.plot(freqs, fft_true, linestyle=':', label="True", linewidth=2, color="tab:orange")
-        ax.set_ylabel("Spectral Amplitude")
-        ax.set_title(f"Mode $\Phi_{{{mode_idx}}}$")
+        line1, = ax.plot(freqs, fft_true, color="tab:blue")
+        line2, = ax.plot(freqs, fft_interp, color="tab:orange", linestyle="--")
+
+        ax.set_ylabel("Spectral Amplitude", fontsize=12)
+        ax.set_title(f"Mode $\\Phi_{{{mode_idx}}}$", fontsize=12)
         ax.grid(True)
-        ax.legend()
+
+        # Legend
+        ax.legend([line1, line2], ["True", "Interpolated ParametricDMD"], fontsize=11, frameon=False)
+
     fig.align_ylabels(axes)
-    axes[-1].set_xlabel("Frequency [Hz]")
-    plt.tight_layout(rect=[0, 0.03, 1, 0.96])
+    axes[-1].set_xlabel("Frequency (Hz)", fontsize=14)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.show()
+
+
 
 
 
@@ -486,8 +502,6 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
     dt_phys=0.01,
     cmap="jet"
 ):
-
-
     # Reconstruct forecast time vector
     forecast_times_physical = 15.0 + (np.array(pdmd.dmd_timesteps) - 500) * dt_phys
 
@@ -495,24 +509,21 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
     step = max(1, int(granularity / dt_phys))
     filtered_times_forecast = [t for t in forecast_times_physical if t_start <= t <= t_end][::step]
 
-    # Fallback if none found
     if len(filtered_times_forecast) == 0:
         print("⚠️ No forecast times found — expanding window by 0.5s.")
         t_start -= 0.25
         t_end += 0.25
         filtered_times_forecast = [t for t in forecast_times_physical if t_start <= t <= t_end][::step]
 
-    print("Filtered forecast times:", filtered_times_forecast)
-
-    # Match to true snapshot indices
     sampled_times_test_float = np.array(sampled_times_test, dtype=float)
+
+    # Match indices
     matched_true_indices = []
     for t in filtered_times_forecast:
         diffs = np.abs(sampled_times_test_float - t)
         min_diff = np.min(diffs)
         matched_true_indices.append(np.argmin(diffs) if min_diff < 1e-2 else None)
 
-    # Match to forecast indices
     forecast_indices = []
     for t in filtered_times_forecast:
         idx = np.where(np.isclose(forecast_times_physical, t, atol=1e-6))[0]
@@ -522,16 +533,58 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
     coords_test = loader_test.vertices[mask_test.numpy(), :]
     triang_test = mtri.Triangulation(coords_test[:, 0], coords_test[:, 1])
 
-    # Forecasted snapshots
     forecasted_snapshots = pdmd.reconstructed_data[0]
 
     # Plotting
     num_rows = len(filtered_times_forecast)
-    fig, axes = plt.subplots(num_rows, 3, figsize=(14, 4 * num_rows))
-    fig.suptitle(f"Flow Comparison — ParametericDMD Interpolation vs True (Re = {Re_test})", fontsize=20)
+    fig, axes = plt.subplots(num_rows, 3, figsize=(14, 3 * num_rows))
+    fig.suptitle(f"Flow Comparison — ParametricDMD Interpolation vs True \n($Re$ = {Re_test})",
+                 fontsize=18, y=0.94)
 
     if num_rows == 1:
         axes = np.expand_dims(axes, axis=0)
+
+    # Compute global min/max for consistent scaling
+    mag_true_all = np.sqrt(np.real(snapshot_test[:num_points_test])**2 +
+                        np.real(snapshot_test[num_points_test:])**2)
+    mag_forecast_all = np.sqrt(np.real(forecasted_snapshots[:num_points_test])**2 +
+                            np.real(forecasted_snapshots[num_points_test:])**2)
+    global_min = min(mag_true_all.min(), mag_forecast_all.min())
+    global_max = max(mag_true_all.max(), mag_forecast_all.max())
+
+
+    fixed_ticks_main = np.linspace(global_min, global_max, 10)
+
+
+    sm_shared = ScalarMappable(norm=Normalize(vmin=global_min, vmax=global_max), cmap=cmap)
+    sm_shared.set_array([])
+
+    residual_all = []
+    for row in range(num_rows):
+        true_idx = matched_true_indices[row]
+        forecast_idx = forecast_indices[row]
+        if true_idx is None or forecast_idx is None:
+            continue
+
+        u_x_true = snapshot_test[:num_points_test, true_idx]
+        u_y_true = snapshot_test[num_points_test:, true_idx]
+        mag_true = np.sqrt(u_x_true**2 + u_y_true**2).real
+
+        U_raw = forecasted_snapshots[:, forecast_idx]
+        U_forecast = U_raw * norm_scale + mean_flow
+        u_x_forecast = U_forecast[:num_points_test]
+        u_y_forecast = U_forecast[num_points_test:]
+        mag_forecast = np.sqrt(u_x_forecast**2 + u_y_forecast**2).real
+
+        error_field = (mag_true - mag_forecast).real
+        residual_all.append(np.abs(error_field))
+
+    resid_min = min(r.min() for r in residual_all)
+    resid_max = max(r.max() for r in residual_all)
+    fixed_ticks_resid = np.linspace(resid_min, resid_max, 10)
+    sm_resid = ScalarMappable(norm=Normalize(vmin=resid_min, vmax=resid_max), cmap=cmap)
+    sm_resid.set_array([])
+
 
     for row in range(num_rows):
         t = filtered_times_forecast[row]
@@ -543,45 +596,66 @@ def plot_flow_comparison_interpolated_dmd_vs_true(
         # True field
         u_x_true = snapshot_test[:num_points_test, true_idx]
         u_y_true = snapshot_test[num_points_test:, true_idx]
-        mag_true = np.sqrt(u_x_true**2 + u_y_true**2)
+        mag_true = np.sqrt(u_x_true**2 + u_y_true**2).real
 
         # Forecast field
         U_raw = forecasted_snapshots[:, forecast_idx]
         U_forecast = U_raw * norm_scale + mean_flow
         u_x_forecast = U_forecast[:num_points_test]
         u_y_forecast = U_forecast[num_points_test:]
-        mag_forecast = np.sqrt(u_x_forecast**2 + u_y_forecast**2)
+        mag_forecast = np.sqrt(u_x_forecast**2 + u_y_forecast**2).real
 
         # Error field
-        error_field = mag_true - mag_forecast
+        error_field = (mag_true - mag_forecast).real
 
-        # Plot true
+        # True plot
         ax_true = axes[row, 0]
-        contour_true = ax_true.tricontourf(triang_test, mag_true, levels=50, cmap=cmap)
+        contour_true = ax_true.tricontourf(triang_test, mag_true, levels=200, cmap=cmap,
+                                           vmin=global_min, vmax=global_max)
         ax_true.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))
-        ax_true.set_title(f"True magnitude t = {t:.2f}s", fontsize=12)
-        ax_true.axis('equal')
-        ax_true.axis('off')
-        fig.colorbar(contour_true, ax=ax_true)
+        ax_true.set_aspect('equal')
+        ax_true.set_xticks([]); ax_true.set_yticks([])
+        for spine in ax_true.spines.values():
+            spine.set_visible(False)
+        fig.colorbar(sm_shared, ax=ax_true, shrink=0.75, pad=0.02, ticks=fixed_ticks_main)
 
-        # Plot forecast
+        # Forecast plot
         ax_forecast = axes[row, 1]
-        contour_forecast = ax_forecast.tricontourf(triang_test, mag_forecast, levels=50, cmap=cmap)
+        contour_forecast = ax_forecast.tricontourf(triang_test, mag_forecast, levels=200, cmap=cmap,
+                                                   vmin=global_min, vmax=global_max)
         ax_forecast.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))
-        ax_forecast.set_title(f"Interpolated reconstruction t = {t:.2f}s", fontsize=12)
-        ax_forecast.axis('equal')
-        ax_forecast.axis('off')
-        fig.colorbar(contour_forecast, ax=ax_forecast)
+        ax_forecast.set_aspect('equal')
+        ax_forecast.set_xticks([]); ax_forecast.set_yticks([])
+        for spine in ax_forecast.spines.values():
+            spine.set_visible(False)
+        fig.colorbar(sm_shared, ax=ax_forecast, shrink=0.75, pad=0.02, ticks=fixed_ticks_main)
 
-        # Plot error
+        # Residual plot
+    
         ax_error = axes[row, 2]
-        contour_error = ax_error.tricontourf(triang_test, np.abs(error_field), levels=50, cmap=cmap)
+        contour_error = ax_error.tricontourf(triang_test, np.abs(error_field), levels=200, cmap=cmap,
+                                            vmin=resid_min, vmax=resid_max)
         ax_error.add_patch(Circle((0.2, 0.2), 0.05, color='black', zorder=10))
-        ax_error.set_title("Residual $(U_{\mathrm{true}} - U_{\mathrm{interpolated}})$", fontsize=12)
-        ax_error.axis('equal')
-        ax_error.axis('off')
-        fig.colorbar(contour_error, ax=ax_error)
+        ax_error.set_aspect('equal')
+        ax_error.set_xticks([]); ax_error.set_yticks([])
+        for spine in ax_error.spines.values():
+            spine.set_visible(False)
 
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        fig.colorbar(sm_resid, ax=ax_error, shrink=0.75, pad=0.02, ticks=fixed_ticks_resid)
+
+        
+        # Add vertical time label for the row
+        ax_true.set_ylabel(f"$t$ = {t:.2f} s", fontsize=15, rotation=90, labelpad=25)
+
+    # Add column titles only once (top row)
+    axes[0, 0].set_title("True Magnitude", fontsize=15, pad=12)
+    axes[0, 1].set_title("Interpolated ParametricDMD", fontsize=15, pad=12)
+    axes[0, 2].set_title(r"Residual $(U_{\mathrm{True}} - U_{\mathrm{Interpolated \ ParametricDMD}})$",
+                         fontsize=15, pad=12)
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95], h_pad=1)
     plt.show()
+
+
+
 
