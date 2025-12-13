@@ -388,7 +388,7 @@ def plot_dmd_modal_comparison_interp_vs_true(
         ax = axes[mode_idx]
         ax.plot(aligned_times, true_modal_coeffs_aligned[mode_idx].real,
              label=f"True", linewidth=2, color="tab:blue")
-        ax.plot(aligned_times, interpolated_modal_coeffs[mode_idx, forecast_indices].real,linestyle=':',
+        ax.plot(aligned_times, interpolated_modal_coeffs[mode_idx, forecast_indices].real,linestyle='--',
                 label=f"Interpolated ParameteriDMD", linewidth=2, color="tab:orange")
         
         ax.set_ylabel(f"Amplitude", fontsize=13)
