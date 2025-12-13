@@ -474,7 +474,7 @@ def plot_fft_modal_comparison_interp_vs_true(
         ax.grid(True)
 
         # Legend
-        ax.legend([line1, line2], ["True", "Interpolated ParametricDMD"], fontsize=11, frameon=False)
+        ax.legend([line1, line2], ["True", "Interpolated ParametricDMD"], fontsize=11, frameon=True)
 
     fig.align_ylabels(axes)
     axes[-1].set_xlabel("Frequency (Hz)", fontsize=14)
