@@ -2,6 +2,32 @@ import numpy as np
 from sklearn.utils.extmath import randomized_svd
 import matplotlib.pyplot as plt
 
+def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
+    """
+    Plots raw snapshot velocity magnitudes over time for each Reynolds number.
+    """
+    n_re = len(Re_list)
+    fig, axes = plt.subplots(n_re, 1, figsize=(12, 3 * n_re), sharex=True)
+
+    for i, Re in enumerate(Re_list):
+        # Global snapshot magnitudes (L2 norm over space at each sampled time)
+        mags = np.linalg.norm(snapshot_dict[Re], axis=0)
+
+        # Plot
+        times = np.array(sampled_times_dict[Re], dtype=float)
+        ax = axes[i]
+        ax.plot(times, mags)
+        ax.set_ylabel("Velocity Magnitude", fontsize=12)
+        ax.set_title(f"$Re$ = {Re}", fontsize=14, pad=6)
+        ax.grid(True, alpha=0.6)
+        ax.legend(fontsize=16)
+    fig.align_ylabels(axes)
+    axes[-1].set_xlabel("$t$ (Time in seconds)", fontsize=16)
+    plt.suptitle("Snapshot Velocity Magnitudes For DMD Training Parameters",
+                 fontsize=18, y = 0.96)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.show()
+
 def compute_SVD_per_re(snapshot_dict, Re_list, n_components=100):
     """
     Compute SVD separately for each Reynolds number.

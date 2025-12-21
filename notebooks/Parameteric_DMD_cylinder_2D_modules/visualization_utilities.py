@@ -32,7 +32,7 @@ def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
         ax.grid(True, alpha=0.6)
         ax.legend(fontsize=16)
     fig.align_ylabels(axes)
-    axes[-1].set_xlabel("Time ($t$ in seconds)", fontsize=16)
+    axes[-1].set_xlabel("$t$ (Time in seconds)", fontsize=16)
     plt.suptitle("Snapshot Velocity Magnitudes For DMD Training Parameters",
                  fontsize=18, y = 0.96)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
@@ -146,7 +146,7 @@ def plot_dmd_modal_comparison(pdmd, Re_list, sampled_times_dict,
         ax.grid(True)
         ax.legend(fontsize=13)
     fig.align_ylabels(axes)
-    axes[-1].set_xlabel("Time ($t$ in seconds)", fontsize=15)
+    axes[-1].set_xlabel("$t$ (Time in seconds)", fontsize=15)
     plt.suptitle(f"Modal Coefficients Comparison — ParametericDMD vs True \n($Re$ = {Re_value})",fontsize=18, y=0.97)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
     plt.show()
@@ -396,7 +396,7 @@ def plot_dmd_modal_comparison_interp_vs_true(
         ax.grid(True)
         ax.legend(fontsize = 12)
     fig.align_ylabels(axes)
-    axes[-1].set_xlabel("Time ($t$ in seconds)", fontsize=14)
+    axes[-1].set_xlabel("$t$ (Time in seconds)", fontsize=14)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.show()
 
