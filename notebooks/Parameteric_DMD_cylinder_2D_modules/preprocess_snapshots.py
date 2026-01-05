@@ -1,64 +1,72 @@
 import numpy as np
 
-def preprocess_snapshots(snapshot_dict, Re_list, Re_test=None):
+def preprocess_snapshots(snapshot_dict, Re_list, snapshot_test, times_test,
+                         train_window=(10.0, 15.0)):
     """
-    Preprocesses velocity snapshots by subtracting the mean flow and normalizing each block.
+    Preprocess velocity snapshots by subtracting the global training mean flow only.
+    No normalization is applied.
 
     Steps:
-    1. Stack all training snapshots across Reynolds numbers and time.
-    2. Compute mean flow from the stacked data.
-    3. Subtract mean flow and normalize each snapshot block.
-    4. Stack normalized snapshots into a 3D array.
-    5. Optionally process a test Reynolds number with the same mean flow.
+    1. Stack all training snapshots across Reynolds numbers and time (within train_window).
+    2. Compute mean flow from the stacked training data.
+    3. Subtract mean flow from each training snapshot block.
+    4. Stack mean-subtracted training snapshots into a 3D array.
+    5. Align test snapshots to train_window, subtract training mean,
+       and also compute its own mean flow separately.
 
-    Parameters:
-    - snapshot_dict: Dictionary of raw velocity snapshots per Reynolds number.
-    - Re_list: List of Reynolds numbers used for training.
-    - Re_test: Optional test Reynolds number to preprocess with same mean flow.
+    Parameters
+    ----------
+    snaplot__error_interpolatedpshot_dict : dict
+        Raw velocity snapshots per Reynolds number (training).
+    Re_list : list
+        Reynolds numbers used for training.
+    snapshot_test : ndarray
+        Raw velocity snapshots for test Re (space_dim, n_time).
+    times_test : array-like
+        Time vector for test snapshots.
+    train_window : tuple
+        Time window for training snapshots (start, end).
 
-    Returns:
-    - train_snapshots: Array of shape (n_Re, space_dim, n_time)
-    - mean_flow: Mean flow vector of shape (space_dim,)
-    - snapshot_processed_dict: Dictionary of normalized snapshots per Re (includes test if provided)
-    - norm_scales: Dictionary of normalization scales per Re (includes test if provided)
+    Returns
+    -------
+    train_snapshots : ndarray
+        Array of shape (n_Re, space_dim, n_time) with mean-subtracted training snapshots.
+    mean_flow_train : ndarray
+        Global mean flow vector from training data (space_dim,).
+    snapshot_processed_dict : dict
+        Dictionary of mean-subtracted snapshots per Re.
+    mean_flow_test : ndarray
+        Mean flow vector of test Re (space_dim,).
+    snapshot_test_processed : ndarray
+        Mean-subtracted test snapshots aligned to train_window.
     """
-    # Step 1: Stack all training snapshots across Re and time
-    all_training_snapshots = np.concatenate([
-        snapshot_dict[Re].T for Re in Re_list
-    ], axis=0)  # shape: (n_total_snapshots, space_dim)
 
-    # Step 2: Compute mean flow
-    mean_flow = np.mean(all_training_snapshots, axis=0)  # shape: (space_dim,)
-    print("Mean flow computed from training window Shape:", mean_flow.shape)
+    # Step 1: Stack all training snapshots
+    all_training_snapshots = np.concatenate([snapshot_dict[Re].T for Re in Re_list], axis=0)
+    mean_flow_train = np.mean(all_training_snapshots, axis=0)
 
-    # Step 3: Subtract mean and normalize training blocks
+    # Step 2: Subtract training mean from training blocks
     snapshot_processed_dict = {}
-    norm_scales = {}
     for Re in Re_list:
         snapshots = snapshot_dict[Re].copy()
-        snapshots -= mean_flow[:, np.newaxis]
-        norm = np.linalg.norm(snapshots)
-        snapshots /= norm
+        snapshots -= mean_flow_train[:, None]
         snapshot_processed_dict[Re] = snapshots
-        norm_scales[Re] = norm
 
-    print("Mean flow subtracted and snapshots normalized for each snapshot matrix.")
-
-    # Step 4: Stack normalized training snapshots
     train_snapshots = np.array([snapshot_processed_dict[Re] for Re in Re_list])
-    print("train_snapshots shape:", train_snapshots.shape)
 
-    # Step 5: Optionally process test Re
-    if Re_test is not None:
-        snapshots = snapshot_dict[Re_test].copy()
-        snapshots -= mean_flow[:, np.newaxis]
-        norm = np.linalg.norm(snapshots)
-        snapshots /= norm
-        snapshot_processed_dict[Re_test] = snapshots
-        norm_scales[Re_test] = norm
-        print(f"Test Re={Re_test}: processed shape = {snapshots.shape}, norm scale = {norm:.4f}")
+    # Step 3: Align test snapshots to training window
+    times_test = np.array(times_test, dtype=float)  # ensure numeric array
+    mask = (times_test >= train_window[0]) & (times_test <= train_window[1])
+    snapshot_test_window = snapshot_test[:, mask]
 
-    return train_snapshots, mean_flow, snapshot_processed_dict, norm_scales
+    # Compute test mean separately
+    mean_flow_test = np.mean(snapshot_test_window, axis=1)
+
+    # Subtract training mean for ROM consistency
+    snapshot_test_processed = snapshot_test_window - mean_flow_train[:, None]
+
+
+    return train_snapshots, mean_flow_train, snapshot_processed_dict, mean_flow_test, snapshot_test_processed
 
 
 def compute_average_inlet_velocity(loader, tol=1e-3, time=None):
