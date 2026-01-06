@@ -5,18 +5,23 @@ import seaborn as sns
 from matplotlib.patches import Circle
 from sklearn.utils.extmath import randomized_svd
 
-def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
+
+def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list, loader_dict=None, normalize_by_inlet=True):
     """
-    Plots raw snapshot velocity magnitudes over time for each Reynolds number.
+    Plots velocity magnitude over time for each Reynolds number.
+    Optionally normalizes by average inlet velocity computed from loader.
     """
+    from preprocess_snapshots import compute_average_inlet_velocity
+
     n_re = len(Re_list)
     fig, axes = plt.subplots(n_re, 1, figsize=(12, 3 * n_re), sharex=True)
 
     for i, Re in enumerate(Re_list):
-        # Global snapshot magnitudes (L2 norm over space at each sampled time)
         mags = np.linalg.norm(snapshot_dict[Re], axis=0)
 
-        # Plot
+        if normalize_by_inlet and loader_dict is not None:
+            U_infty = compute_average_inlet_velocity(loader_dict[Re])
+            mags = mags / U_infty  
         times = np.array(sampled_times_dict[Re], dtype=float)
         ax = axes[i]
         ax.plot(times, mags, label=f"Re={Re}", color='tab:blue')
@@ -25,11 +30,18 @@ def plot_snapshot_magnitudes(snapshot_dict, sampled_times_dict, Re_list):
         ax.grid(True)
         ax.legend()
 
+        threshold = 0.01 * np.max(mags)
+        active_indices = np.where(mags > threshold)[0]
+        if len(active_indices) > 0:
+            t_start = times[active_indices[0]]
+            t_end = times[active_indices[-1]]
+            margin = 0.5
+            ax.set_xlim(t_start - margin, t_end + margin)
+
     axes[-1].set_xlabel("Time (s)")
-    plt.suptitle("Snapshot velocity magnitudes over time across each parameter", fontsize=16)
+    plt.suptitle("Normalized Velocity Field Over Time Across Reynolds Numbers", fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
     plt.show()
-
 
 
 def compute_pod(snapshot_dict, Re_list, n_components=100):
@@ -131,6 +143,9 @@ def plot_dmd_modal_comparison(
         Number of modes to plot (default = 5).
     """
 
+    if Re_target not in Re_list:
+        raise ValueError(f"$Re$ = {Re_target} not found in Re_list")
+
     # Index of target Re in training list
     i = np.where(np.array(Re_list) == Re_target)[0][0]
     times = np.array(sampled_times_dict[Re_target], dtype=float)
@@ -148,34 +163,53 @@ def plot_dmd_modal_comparison(
                 f"Shape mismatch: recon={modal_dmd.shape} vs true={modal_true.shape}"
             )
 
-        # Plot
+        # Create subplots for each mode
         fig, axes = plt.subplots(n_modes_to_plot, 1,
                                  figsize=(12, 3 * n_modes_to_plot),
                                  sharex=True)
+
         for mode in range(n_modes_to_plot):
             ax = axes[mode]
-            ax.plot(times, modal_true[mode],
-                    label=f"True Mode {mode}", color="tab:blue")
-            ax.plot(times, modal_dmd[mode],
-                    label=f"ParametericDMD Mode {mode}",
-                    linestyle="--", color="tab:orange")
-            ax.set_ylabel("Amplitude")
-            ax.set_title(f"Mode {mode} — Re = {Re_target}")
-            ax.grid(True)
-            ax.legend()
+            # Plot true modal coefficients
+            line1, = ax.plot(times, modal_true[mode],
+                             color="tab:blue", lw=1.5, label="True")
+            # Plot reconstructed coefficients
+            line2, = ax.plot(times, modal_dmd[mode],
+                             color="tab:orange", linestyle="--", lw=1.5,
+                             label="ParametricDMD")
 
-        axes[-1].set_xlabel("Time (s)")
+            # Labels and titles
+            ax.set_ylabel("Amplitude", fontsize=12)
+            ax.set_title(f"Mode $\\Phi_{{{mode}}}$", fontsize=12, pad=6)
+            ax.grid(True, alpha=0.6)
+
+            # Legend
+            ax.legend([line1, line2],
+                      ["True", "$ParametricDMD$"],
+                      fontsize=11, loc="center left")
+
+            # Force x-axis to match actual data range
+            ax.set_xlim(times[0], times[-1])
+            ax.set_xticks(np.linspace(times[0], times[-1], 6))
+
+        # Shared labels and layout
+        fig.align_ylabels(axes)
+        axes[-1].set_xlabel(r"$t$ (Time in seconds)", fontsize=14)
+
+        # Overall title
         plt.suptitle(
-            f"DMD Modal Coefficients Within The Training Window\n"
-            f"Training Parameter vs True Data (Noise {level}%)",
-            fontsize=16
+            f"Modal Coefficient Dynamics $a_m(t)$— True vs $ParametricDMD$\n"
+            f"$Training$ Parameter ($Re$ = {Re_target})\n (Noise {level}%)",
+            fontsize=16, y=0.97
         )
+
+        # Layout formatting
         plt.tight_layout(rect=[0, 0, 1, 0.97])
         plt.show()
 
 
 
-def plot_dmd_modal_fft_comparison(
+def plot_dmd_fft_comparison(
     pdmd_models,
     Re_list,
     cached_modal_coeffs,
@@ -227,8 +261,7 @@ def plot_dmd_modal_fft_comparison(
                                  figsize=(10, 2.5 * n_modes_to_plot),
                                  sharex=True)
         fig.suptitle(
-            f"FFT of DMD Modal Coefficients Within The Training Window\n"
-            f"Training Parameter vs True Data (Noise {level}%)",
+            f"Frequency Spectrum of Modal Coefficient Dynamics $a_m(t)$ — True vs $ParametricDMD$ \n  $Training$ Parameter ($Re$ = {Re_target}) \n (Noise {level}%)",
             fontsize=14
         )
 
@@ -237,11 +270,11 @@ def plot_dmd_modal_fft_comparison(
             fft_dmd  = np.abs(np.fft.rfft(np.asarray(modal_dmd[mode],  dtype=np.float64)))
 
             ax = axes[mode]
-            ax.plot(freqs, fft_true, color="tab:blue", label="True FFT")
+            ax.plot(freqs, fft_true, color="tab:blue", label="True")
             ax.plot(freqs, fft_dmd, color="tab:orange", linestyle="--",
-                    label=f"ParametericDMD FFT")
+                    label=f"$ParametericDMD$")
             ax.set_ylabel("Spectral Amplitude")
-            ax.set_title(f"Mode {mode} — Re {Re_target}")
+            ax.set_title(f"Mode $\Phi_{{{mode}}}$")
             ax.grid(True)
             ax.legend()
 
@@ -249,13 +282,14 @@ def plot_dmd_modal_fft_comparison(
         plt.tight_layout(rect=[0, 0, 1, 0.96])
         plt.show()
 
+
+
 def plot_dmd_reconstruction_error(
     pdmd_models,
     Re_list,
     sampled_times_dict,
     snapshot_processed_dict,
-    norm_scales,
-    mean_flow,
+    mean_flow_train,
     Re_target
 ):
     """
@@ -271,13 +305,14 @@ def plot_dmd_reconstruction_error(
         Mapping from Re -> sampled time vector.
     snapshot_processed_dict : dict
         Mapping from Re -> processed snapshots (space_dim, n_time).
-    norm_scales : dict
-        Normalization scaling factors keyed by Re.
-    mean_flow : ndarray
-        Mean flow vector to restore physical space.
+    mean_flow_train : ndarray
+        Mean flow vector from training set (used to restore physical space).
     Re_target : int or float
         Reynolds number to inspect.
     """
+
+    if Re_target not in Re_list:
+        raise ValueError(f"$Re$ = {Re_target} not found in Re_list")
 
     # Index of target Re in training list
     i = list(Re_list).index(Re_target)
@@ -298,8 +333,9 @@ def plot_dmd_reconstruction_error(
         # Compute relative L2 errors over time
         l2_rel_errors = []
         for t in range(n_time):
-            U_true = snapshots_true[:, t] * norm_scales[Re_target] + mean_flow
-            U_dmd  = snapshots_dmd[:, t] * norm_scales[Re_target] + mean_flow
+            # Restore physical space using training mean flow
+            U_true = snapshots_true[:, t] + mean_flow_train
+            U_dmd  = snapshots_dmd[:, t] + mean_flow_train
             diff = U_true - U_dmd
             l2_err = np.linalg.norm(diff) / np.linalg.norm(U_true)
             l2_rel_errors.append(l2_err)
@@ -308,15 +344,16 @@ def plot_dmd_reconstruction_error(
 
     # Final plot formatting
     ax.set_title(
-        f"DMD Reconstruction Error For Training Parameters Within The Training Window\nRe = {Re_target}",
+        f"$ParametricDMD$ Reconstruction Error \n $Training$ Parameter ($Re$ = {Re_target})",
         fontsize=14
     )
-    ax.set_xlabel("Time (s)", fontsize=12)
+    ax.set_xlabel(r"$t$ (Time in seconds)", fontsize=12)
     ax.set_ylabel(r"Relative $L^2$ Error", fontsize=12)
     ax.grid(True, linestyle='--', linewidth=0.6, alpha=0.5)
-    ax.legend(title="Noise Level", fontsize=10)
+    ax.legend(title="Noise Level", fontsize=10, loc="upper right")
     plt.tight_layout()
     plt.show()
+
 
 
 
@@ -325,334 +362,309 @@ def plot_dmd_forecast_error(
     Re_target,
     snapshot_future_dict,
     sampled_times_future_dict,
-    norm_scales,
-    mean_flow
+    mean_flow_train
 ):
     """
     Plot relative L2 reconstruction error over time in the forecast window
-    for a given training Reynolds number.
-
-    Parameters
-    ----------
-    pdmd_models : dict
-        Dictionary of ParametricDMD models keyed by noise level.
-    Re_target : int or float
-        Reynolds number to inspect.
-    snapshot_future_dict : dict
-        Mapping from Re -> future snapshots (space_dim, n_future_times).
-    sampled_times_future_dict : dict
-        Mapping from Re -> future time vector.
-    norm_scales : dict
-        Normalization scaling factors keyed by Re.
-    mean_flow : ndarray
-        Mean flow vector to restore physical space.
+    for a given training Reynolds number, and show a summary table of
+    average percent errors per noise level.
     """
 
+    # True snapshots in the forecast window
     true_future = snapshot_future_dict[Re_target]  # (space_dim, n_future_times)
     times_future = np.array(sampled_times_future_dict[Re_target], dtype=float)
 
-    plt.figure(figsize=(10, 4))
+    # Create two rows: one for plot, one for table
+    fig, (ax, ax_table) = plt.subplots(
+        2, 1, figsize=(10, 7), gridspec_kw={"height_ratios": [3, 1]}
+    )
+
+    # Collect summary errors
+    summary_rows = []
 
     for level, pdmd in pdmd_models.items():
-        # Forecasted snapshots for the future window
-        forecasted_snapshots = pdmd.reconstructed_data[0]  # (space_dim, n_times)
+        forecasted_snapshots = pdmd.reconstructed_data[0]
         forecasted_future = forecasted_snapshots[:, :true_future.shape[1]]
 
         l2_rel_errors = []
         for t in range(true_future.shape[1]):
-            # Restore both true and forecasted fields to physical space
-            U_true = true_future[:, t] * norm_scales[Re_target] + mean_flow
-            U_dmd  = forecasted_future[:, t] * norm_scales[Re_target] + mean_flow
+            U_true = true_future[:, t] + mean_flow_train
+            U_dmd  = forecasted_future[:, t] + mean_flow_train
             diff   = U_true - U_dmd
-
-            # Relative L2 error
             l2_err = np.linalg.norm(diff) / np.linalg.norm(U_true)
             l2_rel_errors.append(l2_err)
 
-        plt.plot(times_future, l2_rel_errors, lw=1.5, label=f"{level}% noise")
+        ax.plot(times_future, l2_rel_errors, lw=1.5, label=f"{level}% noise")
 
-    plt.xlabel("Time (s)")
-    plt.ylabel("Relative L2 Error")
-    plt.title(
-        f"DMD Reconstruction Error For Training Parameters Within The Forecast Window\nRe = {Re_target}"
+        avg_err_pct = 100 * np.mean(l2_rel_errors)
+        summary_rows.append([f"{level}%", f"{avg_err_pct:.2f}%"])
+
+    # Plot formatting
+    ax.set_xlabel(r"$t$ (Time in seconds)", fontsize=12)
+    ax.set_ylabel(r"Relative $L^2$ Error", fontsize=12)
+    ax.set_title(
+        f"$ParametricDMD$ Forecast Reconstruction Error \n $Training$ Parameter ($Re$ = {Re_target}) \n (Noise {level}%)",
+        fontsize=14
     )
-    plt.legend(title="Noise Level")
-    plt.grid(True, linestyle="--", linewidth=0.6, alpha=0.5)
+    ax.legend(title="Noise Level", fontsize=10, loc="upper right")
+    ax.grid(True, linestyle="--", linewidth=0.6, alpha=0.5)
+
+    # Table axis
+    ax_table.axis("off")
+    table = ax_table.table(
+        cellText=summary_rows,
+        colLabels=["Noise Level", "Avg. % Error"],
+        cellLoc="center",
+        loc="center"
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(11)
+
     plt.tight_layout()
     plt.show()
 
 
-def plot_interpolated_vs_true_modal_coeffs(
+
+def plot_dmd_modal_comparison_interp_vs_true(
     pdmd_models,
-    data,
+    snapshot_test,
+    loader_test,
     Re_test,
-    mean_flow,
     dt_phys=0.01,
     t0_phys=15.0,
     n_modes_to_plot=6,
-    tol=0.05
+    time_window=(3.0, 20.0)
 ):
     """
     Compare interpolated vs true modal coefficients for an unseen Reynolds number
-    across noise levels.
-
-    Parameters
-    ----------
-    pdmd_models : dict
-        Dictionary of ParametricDMD models keyed by noise level.
-    data : dict
-        Data dictionary containing snapshot_dict and sampled_times_dict.
-    Re_test : int or float
-        Unseen Reynolds number to test.
-    mean_flow : ndarray
-        Mean flow vector used for preprocessing.
-    dt_phys : float, optional
-        Physical timestep (default = 0.01).
-    t0_phys : float, optional
-        Starting physical time (default = 15.0).
-    n_modes_to_plot : int, optional
-        Number of modes to plot (default = 6).
-    tol : float, optional
-        Time matching tolerance (default = 0.05).
+    across noise levels, using the same time matching logic as the single‑model version.
     """
 
-    # Get test snapshots and times
-    snapshot_test = data["snapshot_dict"][Re_test]
-    sampled_times_test = data["sampled_times_dict"][Re_test]
-
-    for level, model in pdmd_models.items():
-        # Step 1: Forecast time vector
-        n_forecast = model.interpolated_modal_coefficients[0].shape[1]
-        forecast_times = np.arange(n_forecast) * dt_phys + t0_phys
-
-        # Step 2: Match forecast times to test snapshot times
-        sampled_times_test_float = np.array(sampled_times_test, dtype=float)
-        matched_true_indices, forecast_indices = [], []
-        for i, t in enumerate(forecast_times):
-            diffs = np.abs(sampled_times_test_float - t)
-            if np.min(diffs) < tol:
-                matched_true_indices.append(np.argmin(diffs))
-                forecast_indices.append(i)
-
-        if not matched_true_indices:
-            print(f"❌ No valid matches found for noise {level}% at Re={Re_test}")
-            continue
-        print(f"Noise {level}%: matched {len(matched_true_indices)} time points.")
-
-        # Step 3: Preprocess true snapshots
-        snapshot_test_aligned = snapshot_test[:, matched_true_indices].copy()
-        snapshot_test_aligned -= mean_flow[:, np.newaxis]
-        snapshot_test_aligned /= np.linalg.norm(snapshot_test_aligned)
-
-        # Step 4: Extract aligned modal coefficients
-        interpolated_modal_coeffs = model.interpolated_modal_coefficients[0]
-        true_modal_coeffs_aligned = model._spatial_pod.reduce(snapshot_test_aligned)
-        aligned_times = [forecast_times[f] for f in forecast_indices]
-
-        # Step 5: Plot each mode separately
-        fig, axes = plt.subplots(n_modes_to_plot, 1,
-                                 figsize=(10, 2.8 * n_modes_to_plot),
-                                 sharex=True)
-
-        for mode_idx in range(n_modes_to_plot):
-            ax = axes[mode_idx]
-            ax.plot(aligned_times,
-                    interpolated_modal_coeffs[mode_idx, forecast_indices].real,
-                    label=f"Interpolated ParametericDMD Mode {mode_idx}",
-                    linewidth=2, color="tab:blue")
-            ax.plot(aligned_times,
-                    true_modal_coeffs_aligned[mode_idx].real,
-                    linestyle=':', label=f"True Mode {mode_idx}",
-                    linewidth=2, color="tab:orange")
-            ax.set_ylabel("Amplitude")
-            ax.set_title(f"Mode {mode_idx} — Interpolated vs True")
-            ax.grid(True)
-            ax.legend()
-
-        axes[-1].set_xlabel("Physical Time [s]")
-        Re_interp = model.parameters[0, 0]
-        fig.suptitle(
-            f"DMD Modal Coefficient Comparison Within The Forecast Window\n"
-            f"Interpolated Parameter vs True Re = {Re_interp} — Noise {level}%",
-            fontsize=16
-        )
-        plt.tight_layout(rect=[0, 0, 1, 0.96])
-        plt.show()
-
-
-def plot_fft_interpolated_vs_true_modal_coeffs(
-    pdmd_models,
-    snapshot_test,
-    sampled_times_test,
-    mean_flow,
-    Re_interp,
-    dt_phys=0.01,
-    t0_phys=15.0,
-    n_modes_to_plot=6,
-    tol=0.05
-):
-    """
-    Compare FFT of interpolated vs true modal coefficients for an unseen Reynolds number
-    across noise levels.
-
-    Parameters
-    ----------
-    pdmd_models : dict
-        Dictionary of ParametricDMD models keyed by noise level.
-    snapshot_test : ndarray
-        Test snapshots at Re_test (space_dim, n_times).
-    sampled_times_test : array-like
-        Sampled physical times for Re_test snapshots.
-    mean_flow : ndarray
-        Mean flow vector used for preprocessing.
-    Re_interp : float
-        Interpolated Reynolds number (from model.parameters).
-    dt_phys : float, optional
-        Physical timestep (default = 0.01).
-    t0_phys : float, optional
-        Starting physical time (default = 15.0).
-    n_modes_to_plot : int, optional
-        Number of modes to plot (default = 6).
-    tol : float, optional
-        Time matching tolerance (default = 0.05).
-    """
-
+    # Step 0: Extract sampled_times_test from loader within time_window
+    sampled_times_test = [float(t) for t in loader_test.write_times
+                          if time_window[0] <= float(t) <= time_window[1]]
     sampled_times_test_float = np.array(sampled_times_test, dtype=float)
 
     for level, model in pdmd_models.items():
-        # Step 1: Forecast time vector
-        interpolated_modal_coeffs = model.interpolated_modal_coefficients[0]  # (r, n_forecast)
+        # Step 1: Forecast time vector (interpolated coefficients)
+        interpolated_modal_coeffs = model.interpolated_modal_coefficients[0]
         n_forecast = interpolated_modal_coeffs.shape[1]
         forecast_times = np.arange(n_forecast) * dt_phys + t0_phys
 
-        # Step 2: Match forecast times to test snapshot times
-        matched_true_indices, forecast_indices = [], []
-        for i, t in enumerate(forecast_times):
-            diffs = np.abs(sampled_times_test_float - t)
-            if np.min(diffs) < tol:
-                matched_true_indices.append(np.argmin(diffs))
-                forecast_indices.append(i)
+        # Step 2: Slice true snapshots to forecast window
+        mask = (sampled_times_test_float >= t0_phys) & (sampled_times_test_float <= forecast_times[-1])
+        snapshot_test_window = snapshot_test[:, mask]
+        times_test_window = sampled_times_test_float[mask]
 
-        valid_pairs = [(f_idx, t_idx) for f_idx, t_idx in zip(forecast_indices, matched_true_indices)]
-        if not valid_pairs:
-            print(f"❌ No valid time matches found for noise {level}%.")
-            continue
-        print(f"Noise {level}%: matched {len(valid_pairs)} time points.")
+        # Step 3: Align lengths (safe even if mask is empty)
+        min_len = min(snapshot_test_window.shape[1], n_forecast) if snapshot_test_window.shape[1] > 0 else 0
+        snapshot_test_aligned = snapshot_test_window[:, :min_len]
+        forecast_times_aligned = forecast_times[:min_len]
+        interp_modal_aligned = interpolated_modal_coeffs[:, :min_len]
 
-        # Step 3: Filter and align snapshots using paired indices
-        snapshot_test_aligned = snapshot_test[:, [t for _, t in valid_pairs]].copy()
-        snapshot_test_aligned -= mean_flow[:, np.newaxis]
-        snapshot_test_aligned /= np.linalg.norm(snapshot_test_aligned)
+        # Step 4: Project onto training POD basis (skip if no data)
+        if min_len > 0:
+            true_modal_coeffs_aligned = model._spatial_pod.reduce(snapshot_test_aligned)
 
-        # Step 4: Project onto training POD basis
-        true_modal_coeffs_aligned = model._spatial_pod.reduce(snapshot_test_aligned)
+            Re_interp = model.parameters[0, 0]
 
-        # Step 5: FFT comparison
-        freqs = np.fft.rfftfreq(len(valid_pairs), d=dt_phys)
+            # Step 5: Plot modal comparison
+            fig, axes = plt.subplots(n_modes_to_plot, 1,
+                                     figsize=(12, 2.8 * n_modes_to_plot),
+                                     sharex=True)
+            fig.suptitle(
+                f"Modal Coefficient Dynamics $a_m(t)$ — True vs Interpolated $ParametricDMD$\n"
+                f"$Unseen^*$ Parameter (Re={Re_interp}) \n (Noise {level}%)",
+                fontsize=16, y=0.97
+            )
 
-        fig, axes = plt.subplots(n_modes_to_plot, 1,
-                                 figsize=(12, 3.2 * n_modes_to_plot),
-                                 sharex=True)
-        fig.suptitle(
-            f"FFT of DMD Modal Coefficient Comparison Within The Forecast Window\n"
-            f"Interpolated Parameter vs True Re = {Re_interp} — Noise {level}%",
-            fontsize=18
-        )
+            for mode_idx in range(n_modes_to_plot):
+                ax = axes[mode_idx]
+                line1, = ax.plot(forecast_times_aligned,
+                                 true_modal_coeffs_aligned[mode_idx].real,
+                                 color="tab:blue", lw=1.5, label="True")
+                line2, = ax.plot(forecast_times_aligned,
+                                 interp_modal_aligned[mode_idx].real,
+                                 color="tab:orange", linestyle="--", lw=1.5,
+                                 label="$Interpolated ParametricDMD$")
 
-        for mode_idx in range(n_modes_to_plot):
-            ax = axes[mode_idx]
+                ax.set_ylabel("Amplitude", fontsize=12)
+                ax.set_title(f"Mode $\\Phi_{{{mode_idx}}}$", fontsize=12, pad=6)
+                ax.grid(True, alpha=0.6)
+                ax.legend([line1, line2], ["True", "Interpolated $ParametricDMD$"],
+                          fontsize=11, loc="center left")
 
-            # Interpolated FFT
-            interp_mode = interpolated_modal_coeffs[mode_idx, [f for f, _ in valid_pairs]].real
-            fft_interp = np.abs(np.fft.rfft(interp_mode))
-            ax.plot(freqs, fft_interp, label="Interpolated ParametericDMD FFT", linewidth=2, color="tab:blue")
+                # Force x-axis to match actual data range
+                ax.set_xlim(forecast_times_aligned[0], forecast_times_aligned[-1])
+                ax.set_xticks(np.linspace(forecast_times_aligned[0], forecast_times_aligned[-1], 6))
 
-            # True FFT
-            true_mode = true_modal_coeffs_aligned[mode_idx].real
-            fft_true = np.abs(np.fft.rfft(true_mode))
-            ax.plot(freqs, fft_true, linestyle=':', label="True FFT", linewidth=2, color="tab:orange")
+            # Shared labels and layout
+            fig.align_ylabels(axes)
+            axes[-1].set_xlabel("$t$ (Time in seconds)", fontsize=14)
 
-            ax.set_ylabel("Spectral Amplitude")
-            ax.set_title(f"Mode {mode_idx} — Interpolated vs True")
-            ax.grid(True)
-            ax.legend()
-
-        axes[-1].set_xlabel("Frequency [Hz]")
-        plt.tight_layout(rect=[0, 0.03, 1, 0.96])
-        plt.show()
+            plt.tight_layout(rect=[0, 0, 1, 0.97])
+            plt.show()
 
 
 
-def plot_future_window_error_interpolated(
+
+
+
+def plot_fft_modal_comparison_interp_vs_true(
     pdmd_models,
-    data,
+    snapshot_test,
+    loader_test,
     Re_test,
-    norm_scales,
-    mean_flow,
-    t_start=15.0,
-    t_end=20.0
+    dt_phys=0.01,
+    t0_phys=15.0,
+    n_modes_to_plot=6,
+    time_window=(3.0, 20.0)
 ):
     """
-    Plot relative L2 reconstruction error over time in the forecast window
-    for an unseen Reynolds number (interpolated case).
-
-    Parameters
-    ----------
-    pdmd_models : dict
-        Dictionary of ParametricDMD models keyed by noise level.
-    data : dict
-        Data dictionary containing snapshot_dict and sampled_times_dict.
-    Re_test : int or float
-        Unseen Reynolds number to test.
-    norm_scales : dict
-        Normalization scaling factors keyed by Re.
-    mean_flow : ndarray
-        Mean flow vector to restore physical space.
-    t_start : float, optional
-        Start of forecast window (default = 15.0).
-    t_end : float, optional
-        End of forecast window (default = 20.0).
+    Compare FFT of interpolated vs true modal coefficients for an unseen Reynolds number
+    across noise levels, using the same time matching logic as the modal comparison function.
     """
 
-    # Full test snapshots and times
-    true_test = data["snapshot_dict"][Re_test]
-    times_test = np.array(data["sampled_times_dict"][Re_test], dtype=float)
+    # Step 0: Extract sampled_times_test from loader within time_window
+    sampled_times_test = [float(t) for t in loader_test.write_times
+                          if time_window[0] <= float(t) <= time_window[1]]
+    sampled_times_test_float = np.array(sampled_times_test, dtype=float)
 
-    # Slice to forecast window
-    mask_future = (times_test >= t_start) & (times_test <= t_end)
-    true_future = true_test[:, mask_future]
-    times_future = times_test[mask_future]
+    for level, model in pdmd_models.items():
+        # Step 1: Forecast time vector (interpolated coefficients)
+        interpolated_modal_coeffs = model.interpolated_modal_coefficients[0]
+        n_forecast = interpolated_modal_coeffs.shape[1]
+        forecast_times = np.arange(n_forecast) * dt_phys + t0_phys
 
-    plt.figure(figsize=(10, 5))
+        # Step 2: Slice true snapshots to forecast window
+        mask = (sampled_times_test_float >= t0_phys) & (sampled_times_test_float <= forecast_times[-1])
+        snapshot_test_window = snapshot_test[:, mask]
+        times_test_window = sampled_times_test_float[mask]
+
+        # Step 3: Align lengths
+        min_len = min(snapshot_test_window.shape[1], n_forecast) if snapshot_test_window.shape[1] > 0 else 0
+        snapshot_test_aligned = snapshot_test_window[:, :min_len]
+        forecast_times_aligned = forecast_times[:min_len]
+        interp_modal_aligned = interpolated_modal_coeffs[:, :min_len]
+
+        # Step 4: Project onto training POD basis (skip if no data)
+        if min_len > 0:
+            true_modal_coeffs_aligned = model._spatial_pod.reduce(snapshot_test_aligned)
+
+            # Step 5: FFT comparison
+            freqs = np.fft.rfftfreq(min_len, d=dt_phys)
+
+            fig, axes = plt.subplots(n_modes_to_plot, 1,
+                                     figsize=(12, 3.0 * n_modes_to_plot),
+                                     sharex=True)
+            fig.suptitle(
+                f"Frequency Spectrum of Modal Coefficient Dynamics $a_m(t)$ — True vs Interpolated $ParametricDMD$\n"
+                f"$Unseen^*$ Parameter (Re={Re_test}) \n (Noise {level}%)",
+                fontsize=16, y=0.97
+            )
+
+            for mode_idx in range(n_modes_to_plot):
+                ax = axes[mode_idx]
+
+                # True FFT
+                true_mode = true_modal_coeffs_aligned[mode_idx].real
+                fft_true = np.abs(np.fft.rfft(true_mode))
+                ax.plot(freqs, fft_true, label="True", linewidth=2, color="tab:blue")
+
+                # Interpolated FFT
+                interp_mode = interp_modal_aligned[mode_idx].real
+                fft_interp = np.abs(np.fft.rfft(interp_mode))
+                ax.plot(freqs, fft_interp, linestyle='--', label="Interpolated $ParametericDMD$", linewidth=2, color="tab:orange")
+
+                ax.set_ylabel("Spectral Amplitude")
+                ax.set_title(f"Mode $\\Phi_{{{mode_idx}}}$")
+                ax.grid(True)
+                ax.legend(loc="upper right", fontsize=10)
+
+            axes[-1].set_xlabel("Frequency [Hz]")
+            fig.align_ylabels(axes)
+            plt.tight_layout(rect=[0, 0, 1, 0.96])
+            plt.show()
+
+
+
+
+def plot_interp_reconstruction_error(snapshot_test,
+                                     times_test,
+                                     pdmd_models,
+                                     dt_phys,
+                                     Re_test,
+                                     mean_flow_test,
+                                     t0_phys=15.0,
+                                     time_window=(15.0, 20.0)):
+    """
+    Plot relative L2 reconstruction error for ParametricDMD at a test Reynolds number,
+    across multiple noise levels, with a summary table of average % errors.
+    """
+
+    # True CFD snapshots and times
+    t_vec_true = np.array(times_test, dtype=float)
+    X_true = snapshot_test
+
+    # Create two rows: one for plot, one for table
+    fig, (ax, ax_table) = plt.subplots(
+        2, 1, figsize=(10, 7), gridspec_kw={"height_ratios": [3, 1]}
+    )
+
+    summary_rows = []
 
     for level, pdmd in pdmd_models.items():
-        # Set model parameter to unseen Re
-        pdmd.parameters = np.array([[Re_test]])
+        # Forecast times shifted to start at t0_phys
+        X_recon_raw = pdmd.reconstructed_data[0].real
+        n_forecast = X_recon_raw.shape[1]
+        t_vec_forecast = np.arange(n_forecast) * dt_phys + t0_phys
 
-        # Forecasted snapshots for the future window
-        forecasted_snapshots = pdmd.reconstructed_data[0]
-        forecasted_future = forecasted_snapshots[:, :true_future.shape[1]]
+        # Slice true snapshots to forecast window
+        mask = (t_vec_true >= time_window[0]) & (t_vec_true <= t_vec_forecast[-1])
+        X_true_window = X_true[:, mask]
+        t_true_window = t_vec_true[mask]
 
-        # Compute relative L2 errors
-        rel_errors = []
-        for i in range(true_future.shape[1]):
-            U_true = true_future[:, i] * norm_scales[Re_test] + mean_flow
-            U_dmd  = forecasted_future[:, i] * norm_scales[Re_test] + mean_flow
-            diff   = U_true - U_dmd
-            l2_err = np.linalg.norm(diff) / np.linalg.norm(U_true)
-            rel_errors.append(l2_err)
+        # Align lengths
+        min_len = min(X_true_window.shape[1], n_forecast)
+        X_true_aligned = X_true_window[:, :min_len]
+        X_recon_aligned = X_recon_raw[:, :min_len] + mean_flow_test[:, None]
+        time_phys = t_vec_forecast[:min_len]
 
-        plt.plot(times_future, rel_errors, lw=2, label=f"{level}% noise")
+        # Compute errors
+        abs_error_pdmd = np.linalg.norm(X_true_aligned - X_recon_aligned, axis=0)
+        rel_error_pdmd = abs_error_pdmd / np.linalg.norm(X_true_aligned, axis=0)
 
-    plt.xlabel("Time (s)")
-    plt.ylabel("Relative L2 Error")
-    plt.title(
-        f"DMD Reconstruction Error For Interpolated Parameter Within The Forecast Window\nRe = {Re_test}"
+        # Plot curve
+        ax.plot(time_phys, rel_error_pdmd, lw=2, label=f"{level}% noise")
+
+        # Collect average error for table
+        avg_err_pct = 100 * np.mean(rel_error_pdmd)
+        summary_rows.append([f"{level}%", f"{avg_err_pct:.2f}%"])
+
+    # Plot formatting
+    ax.set_xlabel(r"$t$ (Time in seconds)", fontsize=12)
+    ax.set_ylabel(r"Relative $L^2$ Error", fontsize=12)
+    ax.set_title(
+        f"$ParametricDMD$ Interpolation Reconstruction Error\n$Unseen^*$ Parameter (Re={Re_test})",
+        fontsize=14
     )
-    plt.legend(title="Noise Level")
-    plt.grid(True, linestyle="--", alpha=0.6)
+    ax.legend(title="Noise Level", fontsize=10, loc="upper right")
+    ax.grid(True, linestyle="--", alpha=0.6)
+
+    # Table axis
+    ax_table.axis("off")
+    table = ax_table.table(
+        cellText=summary_rows,
+        colLabels=["Noise Level", "Avg. % Error"],
+        cellLoc="center",
+        loc="center"
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(11)
+
     plt.tight_layout()
     plt.show()
+
 
 
 
