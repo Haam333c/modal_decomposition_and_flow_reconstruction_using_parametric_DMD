@@ -454,6 +454,10 @@ def plot_dmd_forecast_error(
     # Compute relative error over time
     abs_error = np.linalg.norm(X_true - X_forecast, axis=0)
     rel_error = abs_error / np.linalg.norm(X_true, axis=0)
+    perc_error = rel_error * 100.0
+
+    # Mean percentage error
+    mean_error = perc_error.mean()
 
     # Plot with nondimensional time
     fig, ax = plt.subplots(figsize=(8,4))
@@ -462,7 +466,13 @@ def plot_dmd_forecast_error(
     ax.set_ylabel(r"Relative $L^2$ Error", fontsize=13)
     ax.set_title(f"ParametricDMD Forecast Reconstruction Error\n Training Parameter $(Re = {Re_target})$", fontsize=15)
     ax.grid(True, alpha=0.6)
-    ax.legend()
+
+    # Place percentage error text where legend would be
+    ax.text(0.98, 0.95, f"Mean Error = {mean_error:.2f}%",
+            transform=ax.transAxes, fontsize=12,
+            ha="right", va="top",
+            bbox=dict(facecolor="white", alpha=0.7, edgecolor="none"))
+
     ax.set_xlim(time_star.min(), time_star.max())
     ax.margins(x=0)
     ax.set_xticks(np.linspace(time_star.min(), time_star.max(), 6))
