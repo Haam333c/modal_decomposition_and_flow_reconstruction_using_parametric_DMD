@@ -390,7 +390,7 @@ def plot_dmd_reconstruction_error(
 
     # Reference velocity for nondimensionalization
     U_ref = Re_target * nu / L_ref
-    time_star = time_vec * U_ref / L_ref   # nondimensional time
+    time_star = (time_vec - time_vec[0]) * U_ref / L_ref   # nondimensional time
 
     # True and reconstructed snapshots (aligned in training window)
     X_true = snapshot_processed_dict[Re_target] + mean_flow_train[:, None]
@@ -609,7 +609,7 @@ def plot_fft_modal_comparison_interp_vs_true(
     fig, axes = plt.subplots(n_modes_to_plot, 1, figsize=(10, 2.5 * n_modes_to_plot), sharex=True)
     fig.suptitle(
         f"Frequency Spectrum of Modal Coefficient Dynamics — True vs Interpolated ParametricDMD\n"
-        f"$Unseen^*$ Parameter (Re = {Re_test})",
+        f"$Unseen^*$ Parameter $(Re = {Re_test})$",
         fontsize=16, y=0.96
     )
 
@@ -865,7 +865,7 @@ def plot_interp_reconstruction_error(snapshot_test,
     # Plot
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.plot(time_star, rel_error_pdmd, lw=2, color="tab:orange")
-    ax.set_xlabel(r"$t^* = (t - t_0) U_{ref} / L_{ref}$", fontsize=13)
+    ax.set_xlabel(r"$t^* = t U_{ref} / L_{ref}$", fontsize=13)
     ax.set_ylabel(r"Relative $L^2$ Error", fontsize=13)
     ax.set_title(r"ParametricDMD Interpolation Reconstruction Error"
                  f"\n $Unseen^*$ Parameter $(Re = {Re_test})$",
