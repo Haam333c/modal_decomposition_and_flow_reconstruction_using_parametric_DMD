@@ -1,4 +1,4 @@
-# modal_decomposition_and_flow_reconstruction_using_parametric_DMD
+# Dynamic_mode_decomposition_for_parametric_fluid_flow_modeling
 Parametric DMD for Flow Reconstruction: From Canonical Cylinder Validation to Transonic Buffet Modeling
 ## Overview
 
