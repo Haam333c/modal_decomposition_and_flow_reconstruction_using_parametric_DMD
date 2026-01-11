@@ -548,7 +548,7 @@ def plot_dmd_modal_comparison_interp_vs_true(
         ax.set_ylabel("Amplitude", fontsize=12)
         ax.set_title(f"Mode $\\Phi_{{{mode_idx}}}$", fontsize=12, pad=6)
         ax.grid(True, alpha=0.6)
-        ax.legend([line1, line2], ["True", "Interpolated ParametricDMD"], fontsize=11, loc="center left")
+        ax.legend([line1, line2], ["True", "Interpolated ParametricDMD"], fontsize=11, loc="center right")
         ax.set_xlim(forecast_times_star_aligned[0], forecast_times_star_aligned[-1])
         ax.set_xticks(np.linspace(forecast_times_star_aligned[0], forecast_times_star_aligned[-1], 6))
 
